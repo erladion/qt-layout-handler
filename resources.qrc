@@ -5,5 +5,13 @@
         <file>remove.svg</file>
         <file>save.svg</file>
         <file>load.svg</file>
+        <file>align-bottom.svg</file>
+        <file>align-center-v.svg</file>
+        <file>align-left.svg</file>
+        <file>align-center-h.svg</file>
+        <file>align-right.svg</file>
+        <file>align-top.svg</file>
+        <file>distribute-h.svg</file>
+        <file>distribute-v.svg</file>
     </qresource>
 </RCC>

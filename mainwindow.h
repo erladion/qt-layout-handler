@@ -16,7 +16,7 @@ public:
 
 protected:
   void resizeEvent(QResizeEvent* event) override;
-  void keyPressEvent(QKeyEvent* event) override;
+  void keyPressEvent(QKeyEvent* event) override;  // Keep previous keyboard support
 
 private slots:
   void toggleGrid(bool checked);
@@ -27,6 +27,16 @@ private slots:
   void removeWindow();
   void saveLayout();
   void loadLayout();
+
+  // --- New Alignment Slots ---
+  void alignLeft();
+  void alignCenterH();
+  void alignRight();
+  void alignTop();
+  void alignCenterV();
+  void alignBottom();
+  void distributeH();
+  void distributeV();
 
 private:
   void createToolbar();
