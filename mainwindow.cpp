@@ -34,6 +34,10 @@ MainWindow::MainWindow() {
   view->setRenderHint(QPainter::Antialiasing);
   view->setFrameShape(QFrame::NoFrame);
 
+  // Enable Rubber Band Selection
+  // Clicking and dragging on empty space will now create a selection box
+  view->setDragMode(QGraphicsView::RubberBandDrag);
+
   view->setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
   view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -43,7 +47,7 @@ MainWindow::MainWindow() {
   setCentralWidget(view);
 
   createToolbar();
-  statusBar()->showMessage("Select multiple items to use Alignment tools.");
+  statusBar()->showMessage("Click and drag to select multiple items.");
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
