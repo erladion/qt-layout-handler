@@ -27,11 +27,14 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         layoutscene.cpp
         resizableappitem.h
         resizableappitem.cpp
-        zoneitem.h zoneitem.cpp
-        rulerbar.h rulerbar.cpp
-        layoutview.h layoutview.cpp
-        snappingitemgroup.h snappingitemgroup.cpp
-        guidelineitem.h guidelineitem.cpp
+        zoneitem.h
+        zoneitem.cpp
+        rulerbar.h
+        rulerbar.cpp
+        snappingitemgroup.h
+        snappingitemgroup.cpp
+        guidelineitem.h
+        guidelineitem.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET layoutmanager APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
