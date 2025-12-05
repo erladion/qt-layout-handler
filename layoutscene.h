@@ -22,7 +22,7 @@ public:
   void setTopBarHeight(int h);
   void setBottomBarHeight(int h);
 
-  // New: Set wallpaper on the internal artboard
+  // Set wallpaper on the internal artboard
   void setWallpaper(const QPixmap& pix);
 
   int topBarHeight() const { return m_topBarHeight; }
@@ -32,6 +32,18 @@ public:
 
   // Getter for cached lines so ArtboardItem can read them
   const QVector<QLineF>& gridLines() const { return m_cachedGridLines; }
+
+public slots:
+  // --- REFACTOR: Alignment Operations moved here ---
+  void alignSelectionLeft();
+  void alignSelectionRight();
+  void alignSelectionTop();
+  void alignSelectionBottom();
+  void alignSelectionCenterH();
+  void alignSelectionCenterV();
+
+  void distributeSelectionH();
+  void distributeSelectionV();
 
 protected:
   void drawBackground(QPainter* painter, const QRectF& rect) override;
@@ -47,10 +59,6 @@ private:
   int m_topBarHeight;
   int m_bottomBarHeight;
 
-  // We need to cast this to ArtboardItem* internally,
-  // but keeping it QGraphicsRectItem* in header avoids circular dep or extra includes if careful.
-  // However, to be clean, let's keep it generic here and cast in cpp,
-  // or forward declare ArtboardItem (but ArtboardItem is usually private to the cpp).
   QGraphicsRectItem* m_bgItem;
 
   QFutureWatcher<QVector<QLineF>> m_gridWatcher;

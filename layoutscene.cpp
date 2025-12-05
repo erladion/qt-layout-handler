@@ -1,13 +1,18 @@
 #include "layoutscene.h"
+#include "resizableappitem.h"
+#include "snappingitemgroup.h"  // Needed for casting checks
+#include "zoneitem.h"
+
 #include <QGraphicsRectItem>
 #include <QLineF>
 #include <QPainter>
 #include <QVector>
 #include <QtConcurrent/QtConcurrent>
+#include <algorithm>  // for std::sort, std::min, std::max
 #include <cmath>
 
 // =========================================================
-// ArtboardItem
+// ArtboardItem (Internal)
 // =========================================================
 class ArtboardItem : public QGraphicsRectItem {
 public:
@@ -19,7 +24,7 @@ public:
 
   void setWallpaper(const QPixmap& pix) {
     m_wallpaper = pix;
-    update();  // Trigger repaint
+    update();
   }
 
   void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override {
@@ -32,20 +37,14 @@ public:
 
     QRectF fullRect = rect();
 
-    // 1. Draw Background / Wallpaper
-    // We draw this FIRST so everything else sits on top.
+    // 1. Draw Background
     if (!m_wallpaper.isNull()) {
-      // Draw the pixmap scaled to fill the entire artboard rect
       painter->drawPixmap(fullRect, m_wallpaper, m_wallpaper.rect());
-
-      // Optional: Add a semi-transparent dark overlay to ensure white text/lines remain visible
-      // painter->fillRect(fullRect, QColor(0, 0, 0, 50));
     } else {
-      // Default grey background
       painter->fillRect(fullRect, QBrush(QColor(80, 80, 80)));
     }
 
-    // 2. Draw Grid (From Cache)
+    // 2. Draw Grid
     if (layoutScene->isGridEnabled()) {
       QPen pen(QColor(110, 110, 110));
       pen.setWidth(0);
@@ -144,10 +143,8 @@ void LayoutScene::setBottomBarHeight(int h) {
   triggerGridUpdate();
 }
 
-// FIX: New Method to pass wallpaper to ArtboardItem
 void LayoutScene::setWallpaper(const QPixmap& pix) {
   if (m_bgItem) {
-    // Safe cast because we know we created it as ArtboardItem
     static_cast<ArtboardItem*>(m_bgItem)->setWallpaper(pix);
   }
 }
@@ -179,4 +176,275 @@ void LayoutScene::onGridCalculationFinished() {
 void LayoutScene::drawBackground(QPainter* painter, const QRectF& rect) {
   Q_UNUSED(painter);
   Q_UNUSED(rect);
+}
+
+// --- REFACTORED ALIGNMENT LOGIC ---
+
+// Helper to check if an item is a valid target for alignment (App, Zone, or Group)
+static bool isValidItem(QGraphicsItem* item) {
+  return (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<SnappingItemGroup*>(item));
+}
+
+void LayoutScene::alignSelectionLeft() {
+  QList<QGraphicsItem*> sel = selectedItems();
+  if (sel.isEmpty())
+    return;
+
+  if (sel.size() == 1) {
+    if (isValidItem(sel.first())) {
+      QRectF safe = getWorkingArea();
+      sel.first()->moveBy(safe.left() - sel.first()->sceneBoundingRect().left(), 0);
+    }
+    return;
+  }
+
+  qreal minX = std::numeric_limits<qreal>::max();
+  for (auto item : sel)
+    if (isValidItem(item))
+      minX = std::min(minX, item->pos().x());
+  for (auto item : sel)
+    if (isValidItem(item))
+      item->setPos(minX, item->pos().y());
+}
+
+void LayoutScene::alignSelectionRight() {
+  QList<QGraphicsItem*> sel = selectedItems();
+  if (sel.isEmpty())
+    return;
+
+  if (sel.size() == 1) {
+    if (isValidItem(sel.first())) {
+      QRectF safe = getWorkingArea();
+      sel.first()->moveBy(safe.right() - sel.first()->sceneBoundingRect().right(), 0);
+    }
+    return;
+  }
+
+  qreal maxRight = -std::numeric_limits<qreal>::max();
+  for (auto item : sel)
+    if (auto app = dynamic_cast<ResizableAppItem*>(item))
+      maxRight = std::max(maxRight, app->pos().x() + app->rect().width());
+    else if (auto grp = dynamic_cast<SnappingItemGroup*>(item))
+      maxRight = std::max(maxRight, grp->pos().x() + grp->boundingRect().width());  // Simplified
+
+  // To be precise with mixed types, we should use sceneBoundingRect for calculation but setPos for movement.
+  // However, simpler logic for "Right Align" usually aligns by RIGHT EDGE.
+  // Re-implementing using bounding rects for robustness:
+  qreal targetX = -std::numeric_limits<qreal>::max();
+  for (auto item : sel) {
+    if (isValidItem(item))
+      targetX = std::max(targetX, item->sceneBoundingRect().right());
+  }
+
+  for (auto item : sel) {
+    if (isValidItem(item)) {
+      // New X = Target Right Edge - Item Width
+      // However, item->pos() is local.
+      // MoveBy is safer.
+      qreal diff = targetX - item->sceneBoundingRect().right();
+      item->moveBy(diff, 0);
+    }
+  }
+}
+
+void LayoutScene::alignSelectionTop() {
+  QList<QGraphicsItem*> sel = selectedItems();
+  if (sel.isEmpty())
+    return;
+
+  if (sel.size() == 1) {
+    if (isValidItem(sel.first())) {
+      QRectF safe = getWorkingArea();
+      sel.first()->moveBy(0, safe.top() - sel.first()->sceneBoundingRect().top());
+    }
+    return;
+  }
+
+  qreal minY = std::numeric_limits<qreal>::max();
+  for (auto item : sel)
+    if (isValidItem(item))
+      minY = std::min(minY, item->sceneBoundingRect().top());
+
+  for (auto item : sel) {
+    if (isValidItem(item)) {
+      qreal diff = minY - item->sceneBoundingRect().top();
+      item->moveBy(0, diff);
+    }
+  }
+}
+
+void LayoutScene::alignSelectionBottom() {
+  QList<QGraphicsItem*> sel = selectedItems();
+  if (sel.isEmpty())
+    return;
+
+  if (sel.size() == 1) {
+    if (isValidItem(sel.first())) {
+      QRectF safe = getWorkingArea();
+      sel.first()->moveBy(0, safe.bottom() - sel.first()->sceneBoundingRect().bottom());
+    }
+    return;
+  }
+
+  qreal targetY = -std::numeric_limits<qreal>::max();
+  for (auto item : sel)
+    if (isValidItem(item))
+      targetY = std::max(targetY, item->sceneBoundingRect().bottom());
+
+  for (auto item : sel) {
+    if (isValidItem(item)) {
+      qreal diff = targetY - item->sceneBoundingRect().bottom();
+      item->moveBy(0, diff);
+    }
+  }
+}
+
+void LayoutScene::alignSelectionCenterH() {
+  QList<QGraphicsItem*> sel = selectedItems();
+  if (sel.isEmpty())
+    return;
+
+  if (sel.size() == 1) {
+    if (isValidItem(sel.first())) {
+      QRectF safe = getWorkingArea();
+      qreal targetCenter = safe.center().x();
+      qreal currentCenter = sel.first()->sceneBoundingRect().center().x();
+      sel.first()->moveBy(targetCenter - currentCenter, 0);
+    }
+    return;
+  }
+
+  QRectF totalRect;
+  bool first = true;
+  for (auto item : sel) {
+    if (isValidItem(item)) {
+      if (first) {
+        totalRect = item->sceneBoundingRect();
+        first = false;
+      } else
+        totalRect = totalRect.united(item->sceneBoundingRect());
+    }
+  }
+  qreal centerX = totalRect.center().x();
+  for (auto item : sel)
+    if (isValidItem(item)) {
+      qreal itemCenter = item->sceneBoundingRect().center().x();
+      item->moveBy(centerX - itemCenter, 0);
+    }
+}
+
+void LayoutScene::alignSelectionCenterV() {
+  QList<QGraphicsItem*> sel = selectedItems();
+  if (sel.isEmpty())
+    return;
+
+  if (sel.size() == 1) {
+    if (isValidItem(sel.first())) {
+      QRectF safe = getWorkingArea();
+      qreal targetCenter = safe.center().y();
+      qreal currentCenter = sel.first()->sceneBoundingRect().center().y();
+      sel.first()->moveBy(0, targetCenter - currentCenter);
+    }
+    return;
+  }
+
+  QRectF totalRect;
+  bool first = true;
+  for (auto item : sel) {
+    if (isValidItem(item)) {
+      if (first) {
+        totalRect = item->sceneBoundingRect();
+        first = false;
+      } else
+        totalRect = totalRect.united(item->sceneBoundingRect());
+    }
+  }
+  qreal centerY = totalRect.center().y();
+  for (auto item : sel)
+    if (isValidItem(item)) {
+      qreal itemCenter = item->sceneBoundingRect().center().y();
+      item->moveBy(0, centerY - itemCenter);
+    }
+}
+
+void LayoutScene::distributeSelectionH() {
+  QList<QGraphicsItem*> sel = selectedItems();
+  if (sel.size() < 3)
+    return;
+
+  // Sort by visual X position
+  std::sort(sel.begin(), sel.end(), [](QGraphicsItem* a, QGraphicsItem* b) { return a->sceneBoundingRect().x() < b->sceneBoundingRect().x(); });
+
+  QGraphicsItem* first = sel.first();
+  QGraphicsItem* last = sel.last();
+
+  if (!isValidItem(first) || !isValidItem(last))
+    return;
+
+  qreal totalItemWidth = 0;
+  for (auto item : sel)
+    if (isValidItem(item))
+      totalItemWidth += item->sceneBoundingRect().width();
+
+  qreal startX = first->sceneBoundingRect().left();
+  qreal endX = last->sceneBoundingRect().right();
+  qreal totalSpan = endX - startX;
+
+  // Calculate gap
+  // Gap = (TotalSpan - SumOfWidths) / (Count - 1)
+  // NOTE: This logic assumes we want equal GAPS between items, not equal centers.
+  // The original code calculated gaps slightly differently.
+  // Standard distribution usually distributes CENTERS or GAPS.
+  // Let's stick to standard "Distribute Centers" if they are same size, or Gaps if not.
+  // Let's implement "Distribute Horizontally" (Equal Gaps).
+
+  qreal totalGapSpace = totalSpan - totalItemWidth;
+  qreal gap = totalGapSpace / (sel.size() - 1);
+
+  qreal currentX = startX;
+  for (auto item : sel) {
+    if (isValidItem(item)) {
+      // Move item to currentX
+      qreal currentItemX = item->sceneBoundingRect().x();
+      item->moveBy(currentX - currentItemX, 0);
+
+      currentX += item->sceneBoundingRect().width() + gap;
+    }
+  }
+}
+
+void LayoutScene::distributeSelectionV() {
+  QList<QGraphicsItem*> sel = selectedItems();
+  if (sel.size() < 3)
+    return;
+
+  std::sort(sel.begin(), sel.end(), [](QGraphicsItem* a, QGraphicsItem* b) { return a->sceneBoundingRect().y() < b->sceneBoundingRect().y(); });
+
+  QGraphicsItem* first = sel.first();
+  QGraphicsItem* last = sel.last();
+
+  if (!isValidItem(first) || !isValidItem(last))
+    return;
+
+  qreal totalItemHeight = 0;
+  for (auto item : sel)
+    if (isValidItem(item))
+      totalItemHeight += item->sceneBoundingRect().height();
+
+  qreal startY = first->sceneBoundingRect().top();
+  qreal endY = last->sceneBoundingRect().bottom();
+  qreal totalSpan = endY - startY;
+
+  qreal totalGapSpace = totalSpan - totalItemHeight;
+  qreal gap = totalGapSpace / (sel.size() - 1);
+
+  qreal currentY = startY;
+  for (auto item : sel) {
+    if (isValidItem(item)) {
+      qreal currentItemY = item->sceneBoundingRect().y();
+      item->moveBy(0, currentY - currentItemY);
+
+      currentY += item->sceneBoundingRect().height() + gap;
+    }
+  }
 }
