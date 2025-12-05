@@ -3,7 +3,7 @@
 
 #include <QGraphicsRectItem>
 
-class QGraphicsTextItem;  // Forward declaration
+class QGraphicsTextItem;
 
 class ResizableAppItem : public QGraphicsRectItem {
 public:
@@ -12,7 +12,6 @@ public:
   ResizableAppItem(const QString& appName, const QRectF& rect);
   QString name() const;
 
-  // Feature 7: Locking
   void setLocked(bool locked);
   bool isLocked() const;
 
@@ -22,26 +21,19 @@ protected:
   void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
   void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
   void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
-  void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;  // Custom paint for lock visual
+  void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
   void contextMenuEvent(QGraphicsSceneContextMenuEvent* event) override;
 
 private:
-  double snapToGridVal(double val, int gridSize);
-  bool rangesOverlap(double min1, double len1, double min2, double len2);
   int getHandleAt(const QPointF& pt);
-
-  // Updates the coordinate/size label
   void updateStatusText();
 
   int m_resizeHandle;
   QString m_name;
-  const double SNAP_DIST = 15.0;
+  // REMOVED: const double SNAP_DIST = 15.0; // Now handled in SnappingUtils or local static for resizing
 
-  // NEW: Text item for stats
   QGraphicsTextItem* m_statusText;
-
-  // Feature 7: Lock State
   bool m_locked;
 };
 

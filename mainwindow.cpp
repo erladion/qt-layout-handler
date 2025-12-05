@@ -44,9 +44,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   view->setRenderHint(QPainter::Antialiasing);
   view->setFrameShape(QFrame::NoFrame);
 
-  // Removed explicit alignment to restore default centering behavior
-  // view->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-
   view->setDragMode(QGraphicsView::RubberBandDrag);
   view->setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
 
@@ -122,8 +119,6 @@ void MainWindow::updateRulers() {
   m_hRuler->update();
   m_vRuler->update();
 }
-
-// REMOVED keyPressEvent implementation
 
 void MainWindow::toggleGrid(bool checked) {
   scene->setGridEnabled(checked);
@@ -374,32 +369,6 @@ void MainWindow::loadLayout() {
   statusBar()->showMessage("Layout loaded from file.", 3000);
 }
 
-// --- DELEGATE ALIGNMENT TO SCENE ---
-void MainWindow::alignLeft() {
-  scene->alignSelectionLeft();
-}
-void MainWindow::alignRight() {
-  scene->alignSelectionRight();
-}
-void MainWindow::alignTop() {
-  scene->alignSelectionTop();
-}
-void MainWindow::alignBottom() {
-  scene->alignSelectionBottom();
-}
-void MainWindow::alignCenterH() {
-  scene->alignSelectionCenterH();
-}
-void MainWindow::alignCenterV() {
-  scene->alignSelectionCenterV();
-}
-void MainWindow::distributeH() {
-  scene->distributeSelectionH();
-}
-void MainWindow::distributeV() {
-  scene->distributeSelectionV();
-}
-
 void MainWindow::createToolbar() {
   QToolBar* toolbar = addToolBar("Tools");
   toolbar->setIconSize(QSize(24, 24));
@@ -450,16 +419,17 @@ void MainWindow::createToolbar() {
 
   toolbar->addSeparator();
 
-  connect(toolbar->addAction(QIcon(":/icons/align-left.svg"), "L"), &QAction::triggered, this, &MainWindow::alignLeft);
-  connect(toolbar->addAction(QIcon(":/icons/align-center-h.svg"), "CH"), &QAction::triggered, this, &MainWindow::alignCenterH);
-  connect(toolbar->addAction(QIcon(":/icons/align-right.svg"), "R"), &QAction::triggered, this, &MainWindow::alignRight);
+  // FIX: Direct connections to LayoutScene slots, removing proxy functions
+  connect(toolbar->addAction(QIcon(":/icons/align-left.svg"), "L"), &QAction::triggered, scene, &LayoutScene::alignSelectionLeft);
+  connect(toolbar->addAction(QIcon(":/icons/align-center-h.svg"), "CH"), &QAction::triggered, scene, &LayoutScene::alignSelectionCenterH);
+  connect(toolbar->addAction(QIcon(":/icons/align-right.svg"), "R"), &QAction::triggered, scene, &LayoutScene::alignSelectionRight);
 
-  connect(toolbar->addAction(QIcon(":/icons/align-top.svg"), "T"), &QAction::triggered, this, &MainWindow::alignTop);
-  connect(toolbar->addAction(QIcon(":/icons/align-center-v.svg"), "CV"), &QAction::triggered, this, &MainWindow::alignCenterV);
-  connect(toolbar->addAction(QIcon(":/icons/align-bottom.svg"), "B"), &QAction::triggered, this, &MainWindow::alignBottom);
+  connect(toolbar->addAction(QIcon(":/icons/align-top.svg"), "T"), &QAction::triggered, scene, &LayoutScene::alignSelectionTop);
+  connect(toolbar->addAction(QIcon(":/icons/align-center-v.svg"), "CV"), &QAction::triggered, scene, &LayoutScene::alignSelectionCenterV);
+  connect(toolbar->addAction(QIcon(":/icons/align-bottom.svg"), "B"), &QAction::triggered, scene, &LayoutScene::alignSelectionBottom);
 
-  connect(toolbar->addAction(QIcon(":/icons/distribute-h.svg"), "DH"), &QAction::triggered, this, &MainWindow::distributeH);
-  connect(toolbar->addAction(QIcon(":/icons/distribute-v.svg"), "DV"), &QAction::triggered, this, &MainWindow::distributeV);
+  connect(toolbar->addAction(QIcon(":/icons/distribute-h.svg"), "DH"), &QAction::triggered, scene, &LayoutScene::distributeSelectionH);
+  connect(toolbar->addAction(QIcon(":/icons/distribute-v.svg"), "DV"), &QAction::triggered, scene, &LayoutScene::distributeSelectionV);
 
   toolbar->addSeparator();
 

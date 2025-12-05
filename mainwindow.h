@@ -24,7 +24,6 @@ public:
 protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
-  // Removed keyPressEvent override as QActions handle shortcuts now
 
 private slots:
   // UI Slots
@@ -48,17 +47,7 @@ private slots:
   void groupItems();
   void ungroupItems();
 
-  // Alignment
-  void alignLeft();
-  void alignRight();
-  void alignTop();
-  void alignBottom();
-  void alignCenterH();
-  void alignCenterV();
-
-  // Distribution
-  void distributeH();
-  void distributeV();
+  // REMOVED: Alignment/Distribution proxy slots (now connected directly)
 
 private:
   void createToolbar();
