@@ -14,5 +14,10 @@
         <file>distribute-h.svg</file>
         <file>distribute-v.svg</file>
         <file>zone.svg</file>
+        <file>image.svg</file>
+        <file>ungroup.svg</file>
+        <file>template.svg</file>
+        <file>lock.svg</file>
+        <file>group.svg</file>
     </qresource>
 </RCC>

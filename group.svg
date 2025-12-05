@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
+    <path d="M0 0h24v24H0V0z" fill="none"/>
+    <!-- Dashed Border (Blue) -->
+    <path d="M2 2h4v2H2V2zm6 0h4v2H8V2zm6 0h4v2h-4V2zm4 4h2v4h-2V6zm0 6h2v4h-2v-4zm0 6h-4v2h4v-2zm-6 0h-4v2h4v-2zm-6 0H2v-2h4v2zm-4-4H0v-4h2v4zm0-6H0V2h2v4z" fill="#1A73E8"/>
+    <!-- Items inside (Light Blue) -->
+    <rect x="5" y="5" width="6" height="6" rx="1" fill="#4285F4"/>
+    <rect x="13" y="13" width="6" height="6" rx="1" fill="#4285F4"/>
+    <!-- Connector -->
+    <path d="M11 11l2 2" stroke="#1A73E8" stroke-width="2"/>
+</svg>

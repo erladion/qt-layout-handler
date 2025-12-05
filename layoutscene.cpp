@@ -14,12 +14,12 @@ public:
   ArtboardItem(const QRectF& rect) : QGraphicsRectItem(rect) {
     setZValue(-1000);
     setAcceptedMouseButtons(Qt::NoButton);
-
-    // PERFORMANCE FIX: Disable Caching.
-    // Caching a large item (1920x1080) causes lag during window resizing
-    // because the CPU has to rescale the large cached image every frame.
-    // Drawing simple primitives (lines/rects) directly is much faster here.
     setCacheMode(QGraphicsItem::NoCache);
+  }
+
+  void setWallpaper(const QPixmap& pix) {
+    m_wallpaper = pix;
+    update();  // Trigger repaint
   }
 
   void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override {
@@ -32,23 +32,25 @@ public:
 
     QRectF fullRect = rect();
 
-    // 1. Fill Artboard
-    painter->fillRect(fullRect, QBrush(QColor(80, 80, 80)));
+    // 1. Draw Background / Wallpaper
+    // We draw this FIRST so everything else sits on top.
+    if (!m_wallpaper.isNull()) {
+      // Draw the pixmap scaled to fill the entire artboard rect
+      painter->drawPixmap(fullRect, m_wallpaper, m_wallpaper.rect());
+
+      // Optional: Add a semi-transparent dark overlay to ensure white text/lines remain visible
+      // painter->fillRect(fullRect, QColor(0, 0, 0, 50));
+    } else {
+      // Default grey background
+      painter->fillRect(fullRect, QBrush(QColor(80, 80, 80)));
+    }
 
     // 2. Draw Grid (From Cache)
     if (layoutScene->isGridEnabled()) {
       QPen pen(QColor(110, 110, 110));
-
-      // PERFORMANCE FIX: Cosmetic Pen
-      // A width of 0 or cosmetic=true tells the painter to ignore
-      // matrix transformations for width. This is significantly faster
-      // to render during zooms/resizes.
-      pen.setWidth(0);  // 0 means "1 pixel cosmetic" in Qt
+      pen.setWidth(0);
       pen.setCosmetic(true);
-
       painter->setPen(pen);
-
-      // FAST: Drawing pre-calculated lines from memory
       painter->drawLines(layoutScene->gridLines());
     }
 
@@ -77,17 +79,17 @@ public:
     painter->setBrush(Qt::NoBrush);
     painter->drawRect(fullRect);
   }
+
+private:
+  QPixmap m_wallpaper;
 };
 
 // =========================================================
 // LayoutScene Implementation
 // =========================================================
 
-// Static helper function for the thread (must be pure calculation)
 static QVector<QLineF> calculateGridLines(int gridSize, QRectF workArea) {
   QVector<QLineF> lines;
-
-  // Estimate size to prevent reallocations
   int estimated = (workArea.width() / gridSize) + (workArea.height() / gridSize) + 2;
   lines.reserve(estimated);
 
@@ -102,7 +104,6 @@ static QVector<QLineF> calculateGridLines(int gridSize, QRectF workArea) {
     if (y >= workArea.top())
       lines.append(QLineF(workArea.left(), y, workArea.right(), y));
   }
-
   return lines;
 }
 
@@ -113,7 +114,6 @@ LayoutScene::LayoutScene(qreal x, qreal y, qreal w, qreal h, QObject* parent)
   addItem(bg);
   m_bgItem = bg;
 
-  // Connect the thread watcher
   connect(&m_gridWatcher, &QFutureWatcher<QVector<QLineF>>::finished, this, &LayoutScene::onGridCalculationFinished);
 }
 
@@ -144,19 +144,24 @@ void LayoutScene::setBottomBarHeight(int h) {
   triggerGridUpdate();
 }
 
+// FIX: New Method to pass wallpaper to ArtboardItem
+void LayoutScene::setWallpaper(const QPixmap& pix) {
+  if (m_bgItem) {
+    // Safe cast because we know we created it as ArtboardItem
+    static_cast<ArtboardItem*>(m_bgItem)->setWallpaper(pix);
+  }
+}
+
 QRectF LayoutScene::getWorkingArea() const {
   return QRectF(sceneRect().left(), sceneRect().top() + m_topBarHeight, sceneRect().width(),
                 sceneRect().height() - m_topBarHeight - m_bottomBarHeight);
 }
 
-// Spawns the background thread
 void LayoutScene::triggerGridUpdate() {
   if (m_gridEnabled) {
-    // Run calculation in background thread
     QFuture<QVector<QLineF>> future = QtConcurrent::run(calculateGridLines, m_gridSize, getWorkingArea());
     m_gridWatcher.setFuture(future);
   } else {
-    // If disabled, just clear immediately
     m_cachedGridLines.clear();
     if (m_bgItem)
       m_bgItem->update();
@@ -164,11 +169,8 @@ void LayoutScene::triggerGridUpdate() {
   }
 }
 
-// Called on Main Thread when calculation is done
 void LayoutScene::onGridCalculationFinished() {
   m_cachedGridLines = m_gridWatcher.result();
-
-  // Force the Artboard item to update its cache
   if (m_bgItem)
     m_bgItem->update();
   update();

@@ -12,12 +12,17 @@ public:
   ResizableAppItem(const QString& appName, const QRectF& rect);
   QString name() const;
 
+  // Feature 7: Locking
+  void setLocked(bool locked);
+  bool isLocked() const;
+
 protected:
   QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
   void hoverMoveEvent(QGraphicsSceneHoverEvent* event) override;
   void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
   void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
   void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
+  void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;  // Custom paint for lock visual
 
   void contextMenuEvent(QGraphicsSceneContextMenuEvent* event) override;
 
@@ -26,7 +31,7 @@ private:
   bool rangesOverlap(double min1, double len1, double min2, double len2);
   int getHandleAt(const QPointF& pt);
 
-  // NEW: Updates the coordinate/size label
+  // Updates the coordinate/size label
   void updateStatusText();
 
   int m_resizeHandle;
@@ -35,6 +40,9 @@ private:
 
   // NEW: Text item for stats
   QGraphicsTextItem* m_statusText;
+
+  // Feature 7: Lock State
+  bool m_locked;
 };
 
 #endif  // RESIZABLEAPPITEM_H

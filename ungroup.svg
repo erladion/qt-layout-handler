@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
+    <path d="M0 0h24v24H0V0z" fill="none"/>
+    <!-- Separated Items (Orange) -->
+    <rect x="3" y="3" width="7" height="7" rx="1" fill="#F57C00"/>
+    <rect x="14" y="14" width="7" height="7" rx="1" fill="#F57C00"/>
+    <!-- Separation Arrows (Grey) -->
+    <path d="M11 7h2M17 11v2" stroke="#616161" stroke-width="2" stroke-linecap="round"/>
+    <!-- Ghost Container (Faint Grey) -->
+    <path d="M20 4h-2V2h2v2zm-4 0h-2V2h2v2zm-4 0h-2V2h2v2z" fill="#E0E0E0"/>
+    <path d="M4 20h2v2H4v-2zm4 0h2v2H8v-2zm4 0h2v2h-2v-2z" fill="#E0E0E0"/>
+</svg>

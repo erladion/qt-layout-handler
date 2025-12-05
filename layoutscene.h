@@ -5,6 +5,7 @@
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
 #include <QLineF>
+#include <QPixmap>
 #include <QVector>
 
 class LayoutScene : public QGraphicsScene {
@@ -21,23 +22,24 @@ public:
   void setTopBarHeight(int h);
   void setBottomBarHeight(int h);
 
+  // New: Set wallpaper on the internal artboard
+  void setWallpaper(const QPixmap& pix);
+
   int topBarHeight() const { return m_topBarHeight; }
   int bottomBarHeight() const { return m_bottomBarHeight; }
 
   QRectF getWorkingArea() const;
 
-  // New: Getter for the cached lines so ArtboardItem can read them
+  // Getter for cached lines so ArtboardItem can read them
   const QVector<QLineF>& gridLines() const { return m_cachedGridLines; }
 
 protected:
   void drawBackground(QPainter* painter, const QRectF& rect) override;
 
 private slots:
-  // Slot called when background thread finishes calculating lines
   void onGridCalculationFinished();
 
 private:
-  // Helper to start the background thread
   void triggerGridUpdate();
 
   bool m_gridEnabled;
@@ -45,9 +47,12 @@ private:
   int m_topBarHeight;
   int m_bottomBarHeight;
 
+  // We need to cast this to ArtboardItem* internally,
+  // but keeping it QGraphicsRectItem* in header avoids circular dep or extra includes if careful.
+  // However, to be clean, let's keep it generic here and cast in cpp,
+  // or forward declare ArtboardItem (but ArtboardItem is usually private to the cpp).
   QGraphicsRectItem* m_bgItem;
 
-  // Threading members
   QFutureWatcher<QVector<QLineF>> m_gridWatcher;
   QVector<QLineF> m_cachedGridLines;
 };

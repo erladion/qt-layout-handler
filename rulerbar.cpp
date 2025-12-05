@@ -1,109 +1,191 @@
 #include "rulerbar.h"
+#include <QDebug>
 #include <QGraphicsView>
+#include <QMainWindow>
+#include <QMouseEvent>
 #include <QPainter>
-#include <QScrollBar>
+#include <QStatusBar>
 #include <cmath>
+#include "guidelineitem.h"
 
-RulerBar::RulerBar(Orientation orientation, QGraphicsView* view, QWidget* parent) : QWidget(parent), m_orientation(orientation), m_view(view) {
-  // Fixed size for the ruler thickness
-  if (m_orientation == Horizontal) {
+RulerBar::RulerBar(Orientation orientation, QGraphicsView* view, QWidget* parent)
+    : QWidget(parent), m_orientation(orientation), m_view(view), m_cursorPos(-1000), m_dragging(false) {
+  setMouseTracking(true);
+
+  if (m_orientation == Horizontal)
     setFixedHeight(25);
-  } else {
+  else
     setFixedWidth(25);
-  }
+
+  setStyleSheet("background-color: #2b2b2b; color: #a0a0a0;");
 }
 
 void RulerBar::updateCursorPos(const QPoint& pos) {
-  m_lastMousePos = pos;
-  update();  // Redraw to move the marker
+  if (!m_view)
+    return;
+
+  QPointF scenePos = m_view->mapToScene(pos);
+
+  if (m_orientation == Horizontal)
+    m_cursorPos = scenePos.x();
+  else
+    m_cursorPos = scenePos.y();
+
+  // Update Status Bar with integer coordinates
+  QMainWindow* mainWindow = qobject_cast<QMainWindow*>(window());
+  if (mainWindow && mainWindow->statusBar()) {
+    QString coordText = QString("X: %1, Y: %2").arg(static_cast<int>(std::round(scenePos.x()))).arg(static_cast<int>(std::round(scenePos.y())));
+    mainWindow->statusBar()->showMessage(coordText);
+  }
+
+  update();
+}
+
+void RulerBar::mouseMoveEvent(QMouseEvent* event) {
+  if (m_view) {
+    QPoint viewPos;
+    if (m_orientation == Horizontal) {
+      viewPos = QPoint(event->pos().x(), 0);
+    } else {
+      viewPos = QPoint(0, event->pos().y());
+    }
+
+    // Delegate to shared function to ensure status bar updates
+    updateCursorPos(viewPos);
+  }
+
+  if (m_dragging) {
+    if (m_orientation == Horizontal)
+      m_dragPos = event->pos().y();
+    else
+      m_dragPos = event->pos().x();
+    setCursor(Qt::SplitVCursor);
+  }
+
+  QWidget::mouseMoveEvent(event);
+}
+
+void RulerBar::mousePressEvent(QMouseEvent* event) {
+  if (event->button() == Qt::LeftButton) {
+    m_dragging = true;
+  }
+  QWidget::mousePressEvent(event);
+}
+
+void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
+  if (m_dragging && m_view) {
+    // Condition 1: Dragged out into view
+    bool droppedInView = false;
+    if (m_orientation == Horizontal && event->pos().y() > height())
+      droppedInView = true;
+    if (m_orientation == Vertical && event->pos().x() > width())
+      droppedInView = true;
+
+    // Condition 2: Simply clicked inside the ruler
+    bool clickedInRuler = rect().contains(event->pos());
+
+    if (droppedInView || clickedInRuler) {
+      QPointF dropScenePos = m_view->mapToScene(event->pos());
+
+      // Logic Update:
+      // Click Top Ruler (Horizontal) -> Get Vertical Line at X
+      // Click Left Ruler (Vertical) -> Get Horizontal Line at Y
+
+      GuideLineItem::Orientation guideOri;
+      qreal pos;
+
+      if (m_orientation == Horizontal) {
+        // Top Ruler: measures X axis -> Create Vertical Line
+        guideOri = GuideLineItem::Vertical;
+        pos = dropScenePos.x();
+      } else {
+        // Left Ruler: measures Y axis -> Create Horizontal Line
+        guideOri = GuideLineItem::Horizontal;
+        pos = dropScenePos.y();
+      }
+
+      GuideLineItem* guide = new GuideLineItem(guideOri, pos);
+      m_view->scene()->addItem(guide);
+    }
+
+    m_dragging = false;
+    setCursor(Qt::ArrowCursor);
+  }
+  QWidget::mouseReleaseEvent(event);
 }
 
 void RulerBar::paintEvent(QPaintEvent* event) {
   Q_UNUSED(event);
-  QPainter painter(this);
-  painter.fillRect(rect(), QColor(50, 50, 50));  // Background
+  QPainter p(this);
+  p.fillRect(rect(), QColor(43, 43, 43));
 
-  // Get Viewport Transform to map pixels to scene units
-  QTransform t = m_view->viewportTransform();
+  p.setPen(QColor(160, 160, 160));
+  QFont font = p.font();
+  font.setPointSize(7);
+  p.setFont(font);
 
-  // Scale factor (how many pixels is 1 scene unit?)
-  // Horizontal scale is m11, Vertical is m22
-  double scale = (m_orientation == Horizontal) ? t.m11() : t.m22();
+  if (!m_view)
+    return;
 
-  // Offset (where does the scene start relative to viewport 0?)
-  // dx is horizontal translation, dy is vertical
-  double offset = (m_orientation == Horizontal) ? t.dx() : t.dy();
+  QRect viewportRect = m_view->viewport()->rect();
+  QPointF topLeft = m_view->mapToScene(viewportRect.topLeft());
+  QPointF bottomRight = m_view->mapToScene(viewportRect.bottomRight());
 
-  // Calculate start and end in SCENE coordinates visible on this ruler
-  // We Map the widget pixels (0 to width) back to scene coords
-  // Formula: sceneCoord = (widgetCoord - offset) / scale
-  double startScene = (0 - offset) / scale;
-  double endScene = ((m_orientation == Horizontal ? width() : height()) - offset) / scale;
+  double start, end;
+  double scale = m_view->transform().m11();
 
-  // Define Tick Interval based on Zoom level
-  // We want ticks roughly every 50-100 visual pixels
-  double visualInterval = 50.0;
-  double logicalInterval = visualInterval / scale;
+  if (m_orientation == Horizontal) {
+    start = topLeft.x();
+    end = bottomRight.x();
+  } else {
+    start = topLeft.y();
+    end = bottomRight.y();
+  }
 
-  // Round interval to nice numbers (10, 50, 100, 500, etc.)
-  double magnitude = std::pow(10, std::floor(std::log10(logicalInterval)));
-  if (logicalInterval / magnitude < 2)
-    logicalInterval = 2 * magnitude;
-  else if (logicalInterval / magnitude < 5)
-    logicalInterval = 5 * magnitude;
-  else
-    logicalInterval = 10 * magnitude;
+  double step = 100;
+  if (scale > 2.0)
+    step = 10;
+  else if (scale > 0.8)
+    step = 50;
+  else if (scale < 0.2)
+    step = 500;
 
-  // Align start to the grid
-  double startTick = std::floor(startScene / logicalInterval) * logicalInterval;
+  double firstTick = std::floor(start / step) * step;
 
-  // DRAW TICKS
-  painter.setPen(QColor(180, 180, 180));
-  QFont font = painter.font();
-  font.setPointSize(8);
-  painter.setFont(font);
+  for (double v = firstTick; v <= end; v += step) {
+    QPointF widgetPt;
+    if (m_orientation == Horizontal)
+      widgetPt = m_view->mapFromScene(v, 0);
+    else
+      widgetPt = m_view->mapFromScene(0, v);
 
-  for (double current = startTick; current <= endScene; current += logicalInterval) {
-    // Convert back to Widget pixels to draw
-    double pixelPos = (current * scale) + offset;
+    int pos = (m_orientation == Horizontal) ? widgetPt.x() : widgetPt.y();
 
     if (m_orientation == Horizontal) {
-      // Major Tick
-      painter.drawLine(QPointF(pixelPos, 15), QPointF(pixelPos, 25));
-      // Text
-      painter.drawText(QRectF(pixelPos + 2, 0, 50, 15), Qt::AlignLeft | Qt::AlignTop, QString::number((int)current));
-
-      // Minor Ticks (4 subdivisions)
-      double minorStep = logicalInterval / 5.0;
-      for (int i = 1; i < 5; i++) {
-        double minorPos = ((current + i * minorStep) * scale) + offset;
-        painter.drawLine(QPointF(minorPos, 20), QPointF(minorPos, 25));
-      }
+      p.drawLine(pos, 15, pos, 25);
+      p.drawText(pos + 2, 12, QString::number((int)v));
     } else {
-      // Major Tick
-      painter.drawLine(QPointF(15, pixelPos), QPointF(25, pixelPos));
-      // Text (Rotated for vertical ruler looks cool, but horizontal text is easier to read)
-      // Let's draw horizontal text sideways
-      painter.save();
-      painter.translate(12, pixelPos + 2);
-      painter.rotate(90);
-      painter.drawText(0, 0, QString::number((int)current));
-      painter.restore();
-
-      // Minor Ticks
-      double minorStep = logicalInterval / 5.0;
-      for (int i = 1; i < 5; i++) {
-        double minorPos = ((current + i * minorStep) * scale) + offset;
-        painter.drawLine(QPointF(20, minorPos), QPointF(25, minorPos));
-      }
+      p.drawLine(15, pos, 25, pos);
+      p.save();
+      p.translate(12, pos + 2);
+      p.rotate(-90);
+      p.drawText(0, 0, QString::number((int)v));
+      p.restore();
     }
   }
 
-  // DRAW CURSOR MARKER
-  painter.setPen(QPen(Qt::red, 1));
-  if (m_orientation == Horizontal) {
-    painter.drawLine(m_lastMousePos.x(), 0, m_lastMousePos.x(), height());
-  } else {
-    painter.drawLine(0, m_lastMousePos.y(), width(), m_lastMousePos.y());
-  }
+  p.setPen(QPen(Qt::red, 1));
+
+  QPointF markerPt;
+  if (m_orientation == Horizontal)
+    markerPt = m_view->mapFromScene(m_cursorPos, 0);
+  else
+    markerPt = m_view->mapFromScene(0, m_cursorPos);
+
+  int markerPos = (m_orientation == Horizontal) ? markerPt.x() : markerPt.y();
+
+  if (m_orientation == Horizontal)
+    p.drawLine(markerPos, 0, markerPos, 25);
+  else
+    p.drawLine(0, markerPos, 25, markerPos);
 }

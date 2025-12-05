@@ -7,12 +7,16 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsTextItem>
 #include <QMenu>
+#include <QPainter>
 #include <QPen>
 #include <cmath>
+#include "guidelineitem.h"  // NEW: Include for snapping
 #include "layoutscene.h"
 #include "zoneitem.h"
 
-ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect) : QGraphicsRectItem(rect), m_resizeHandle(None), m_name(appName) {
+ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
+    : QGraphicsRectItem(rect), m_resizeHandle(None), m_name(appName), m_locked(false) {
+  // Default Flags
   setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemSendsGeometryChanges);
 
   setAcceptHoverEvents(true);
@@ -26,7 +30,7 @@ ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect) :
   text->setDefaultTextColor(Qt::lightGray);
   text->setPos(5, 5);
 
-  // NEW: Status Label (Bottom Left, Smaller font)
+  // Status Label (Bottom Left, Smaller font)
   m_statusText = new QGraphicsTextItem("", this);
   m_statusText->setDefaultTextColor(QColor(200, 200, 200));
   QFont font = m_statusText->font();
@@ -40,9 +44,27 @@ QString ResizableAppItem::name() const {
   return m_name;
 }
 
+void ResizableAppItem::setLocked(bool locked) {
+  m_locked = locked;
+  // If locked, disable movement.
+  // We keep Selectable so the user can select it to Unlock it.
+  setFlag(QGraphicsItem::ItemIsMovable, !m_locked);
+
+  // Visual feedback update
+  update();
+}
+
+bool ResizableAppItem::isLocked() const {
+  return m_locked;
+}
+
 void ResizableAppItem::updateStatusText() {
   // Format: X, Y (WxH)
   QString status = QString("%1, %2 (%3x%4)").arg((int)pos().x()).arg((int)pos().y()).arg((int)rect().width()).arg((int)rect().height());
+
+  if (m_locked) {
+    status += " [LOCKED]";
+  }
 
   m_statusText->setPlainText(status);
 
@@ -62,6 +84,11 @@ bool ResizableAppItem::rangesOverlap(double min1, double len1, double min2, doub
 
 void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
   QMenu menu;
+
+  // Feature 7: Lock/Unlock Action
+  QAction* lockAction = menu.addAction(m_locked ? "Unlock" : "Lock");
+  menu.addSeparator();
+
   QAction* raiseAction = menu.addAction("Bring to Front");
   QAction* lowerAction = menu.addAction("Send to Back");
   menu.addSeparator();
@@ -69,7 +96,9 @@ void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
 
   QAction* selectedAction = menu.exec(event->screenPos());
 
-  if (selectedAction == raiseAction)
+  if (selectedAction == lockAction) {
+    setLocked(!m_locked);
+  } else if (selectedAction == raiseAction)
     setZValue(100);
   else if (selectedAction == lowerAction)
     setZValue(-1);
@@ -81,18 +110,51 @@ void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
   }
 }
 
+void ResizableAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
+  QGraphicsRectItem::paint(painter, option, widget);
+
+  // Feature 7: Visual Indicator for Locked state
+  if (m_locked) {
+    painter->save();
+    QPen p(Qt::red, 2, Qt::DashLine);
+    painter->setPen(p);
+    painter->setBrush(Qt::NoBrush);
+    painter->drawRect(rect());
+
+    // Draw a small lock icon or text in top right
+    painter->setPen(Qt::red);
+    painter->drawText(rect().adjusted(0, 5, -5, 0), Qt::AlignTop | Qt::AlignRight, "🔒");
+    painter->restore();
+  }
+}
+
 QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant& value) {
   if (change == ItemSelectedHasChanged) {
     if (value.toBool()) {
-      setPen(QPen(QColor(0, 120, 215), 3));
-      setZValue(100);
+      // If locked, show distinct selection color (e.g., Orange instead of Blue)
+      QColor selColor = m_locked ? QColor(255, 100, 100) : QColor(0, 120, 215);
+      setPen(QPen(selColor, 3));
+      if (!m_locked)
+        setZValue(100);  // Don't auto-raise if locked
     } else {
       setPen(QPen(Qt::black, 1));
-      setZValue(0);
+      if (!m_locked)
+        setZValue(0);
     }
   }
 
   // POSITION CHANGE
+  // If locked, we shouldn't be here because Movable flag is off, but safety check:
+  if (change == ItemPositionChange && m_locked) {
+    return pos();  // Reject change
+  }
+
+  // Feature 6: Grouping Support
+  // If this item is part of a Group (has a parent item), we DISABLE the custom snapping logic.
+  if (parentItem() != nullptr) {
+    return QGraphicsRectItem::itemChange(change, value);
+  }
+
   if (change == ItemPositionChange && scene()) {
     QPointF newPos = value.toPointF();
     LayoutScene* layoutScene = dynamic_cast<LayoutScene*>(scene());
@@ -106,6 +168,33 @@ QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant&
 
     bool snappedX = false;
     bool snappedY = false;
+
+    // --- 0. NEW: Snap to Guide Lines (Priority) ---
+    for (QGraphicsItem* item : scene()->items()) {
+      if (GuideLineItem* guide = dynamic_cast<GuideLineItem*>(item)) {
+        if (guide->orientation() == GuideLineItem::Vertical) {
+          // Snap Left/Right edges to Vertical Line
+          double guideX = guide->pos().x();
+          if (qAbs(desiredLeft - guideX) < SNAP_DIST) {
+            desiredLeft = guideX;
+            snappedX = true;
+          } else if (qAbs(desiredRight - guideX) < SNAP_DIST) {
+            desiredLeft = guideX - myRect.width();
+            snappedX = true;
+          }
+        } else {
+          // Snap Top/Bottom edges to Horizontal Line
+          double guideY = guide->pos().y();
+          if (qAbs(desiredTop - guideY) < SNAP_DIST) {
+            desiredTop = guideY;
+            snappedY = true;
+          } else if (qAbs(desiredBottom - guideY) < SNAP_DIST) {
+            desiredTop = guideY - myRect.height();
+            snappedY = true;
+          }
+        }
+      }
+    }
 
     if (qAbs(desiredLeft - validArea.left()) < SNAP_DIST) {
       desiredLeft = validArea.left();
@@ -127,6 +216,10 @@ QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant&
       for (QGraphicsItem* item : scene()->items()) {
         if (item == this)
           continue;
+        // Ignore parent group if checking collisions (though parent isn't ResizableAppItem usually)
+        if (item == parentItem())
+          continue;
+
         ResizableAppItem* otherItem = dynamic_cast<ResizableAppItem*>(item);
         if (!otherItem)
           continue;
@@ -185,27 +278,18 @@ QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant&
     if (desiredTop + myRect.height() > validArea.bottom())
       desiredTop = validArea.bottom() - myRect.height();
 
-    // Update text whenever position changes
-    // We defer this slightly or just call updateStatusText() but position is not yet committed to 'pos()'
-    // So we might need to manually format string here or rely on the fact that pos() updates after return.
-    // Actually, we can just use the proposed newPos for the text.
-
-    // However, itemChange is called BEFORE pos() is updated.
-    // We will just let the text update in the next paint cycle or force it here using the new coords.
-    // But since we can't easily set the text based on "future" pos easily in a helper,
-    // we'll update it but we need to pass the new pos.
-
-    // Simpler approach: updateStatusText uses current pos(), which is old.
-    // Let's rely on the fact that scene updates happen frequently.
-    // Or better: Since we return a new point, the item WILL move there.
-    // We can schedule an update.
-
     return QPointF(desiredLeft, desiredTop);
   }
   return QGraphicsRectItem::itemChange(change, value);
 }
 
 void ResizableAppItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event) {
+  // Feature 7: If locked, no resize cursor
+  if (m_locked) {
+    setCursor(Qt::ArrowCursor);
+    return;
+  }
+
   int handle = getHandleAt(event->pos());
   QCursor cursor = Qt::ArrowCursor;
   if (handle == (Right | Bottom))
@@ -219,6 +303,12 @@ void ResizableAppItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event) {
 }
 
 void ResizableAppItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+  // Feature 7: If locked, ignore resize clicks
+  if (m_locked) {
+    QGraphicsRectItem::mousePressEvent(event);  // Pass through for selection
+    return;
+  }
+
   m_resizeHandle = getHandleAt(event->pos());
   if (m_resizeHandle == None) {
     QGraphicsRectItem::mousePressEvent(event);
@@ -228,7 +318,7 @@ void ResizableAppItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
 void ResizableAppItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
   QGraphicsRectItem::mouseReleaseEvent(event);
 
-  if (scene() && m_resizeHandle == None) {
+  if (scene() && m_resizeHandle == None && !m_locked && parentItem() == nullptr) {
     QList<QGraphicsItem*> itemsUnderMouse = scene()->items(event->scenePos());
 
     for (QGraphicsItem* item : itemsUnderMouse) {
@@ -241,14 +331,13 @@ void ResizableAppItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     }
   }
 
-  // Always update text on release to be sure
   updateStatusText();
 }
 
 void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
-  // If moving (not resizing), the base implementation calls itemChange,
-  // but itemChange runs before the pos is updated.
-  // So we manually call updateStatusText() after the base Move logic.
+  if (m_locked)
+    return;  // Should not happen due to flags, but safety first
+
   if (m_resizeHandle == None) {
     QGraphicsRectItem::mouseMoveEvent(event);
     updateStatusText();
@@ -262,6 +351,23 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 
     double currentX = pos().x();
     double currentY = pos().y();
+
+    // Grouping Adjustment: If we are in a group, pos() is local.
+    // Converting mouseScenePos (Scene) to Local logic is needed for accurate resizing inside groups.
+    // However, for V1, we simply assume Resizing is done BEFORE grouping.
+    if (parentItem()) {
+      double newW = event->pos().x();
+      double newH = event->pos().y();
+      if (newW < 50)
+        newW = 50;
+      if (newH < 50)
+        newH = 50;
+      QRectF newRect = rect();
+      newRect.setWidth(newW);
+      newRect.setHeight(newH);
+      setRect(newRect);
+      return;
+    }
 
     double proposedRight = mouseScenePos.x();
     double proposedBottom = mouseScenePos.y();
