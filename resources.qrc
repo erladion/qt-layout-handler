@@ -13,5 +13,6 @@
         <file>align-top.svg</file>
         <file>distribute-h.svg</file>
         <file>distribute-v.svg</file>
+        <file>zone.svg</file>
     </qresource>
 </RCC>

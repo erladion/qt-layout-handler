@@ -3,6 +3,8 @@
 
 #include <QGraphicsRectItem>
 
+class QGraphicsTextItem;  // Forward declaration
+
 class ResizableAppItem : public QGraphicsRectItem {
 public:
   enum ResizeHandle { None = 0, Left = 1, Top = 2, Right = 4, Bottom = 8 };
@@ -17,7 +19,6 @@ protected:
   void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
   void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
 
-  // NEW: Handle right-click menus
   void contextMenuEvent(QGraphicsSceneContextMenuEvent* event) override;
 
 private:
@@ -25,9 +26,15 @@ private:
   bool rangesOverlap(double min1, double len1, double min2, double len2);
   int getHandleAt(const QPointF& pt);
 
+  // NEW: Updates the coordinate/size label
+  void updateStatusText();
+
   int m_resizeHandle;
   QString m_name;
   const double SNAP_DIST = 15.0;
+
+  // NEW: Text item for stats
+  QGraphicsTextItem* m_statusText;
 };
 
 #endif  // RESIZABLEAPPITEM_H

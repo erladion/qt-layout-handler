@@ -1,14 +1,16 @@
 #include "resizableappitem.h"
-#include <QAction>  // Added
+#include <QAction>
 #include <QBrush>
 #include <QCursor>
+#include <QFont>
 #include <QGraphicsScene>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsTextItem>
-#include <QMenu>  // Added
+#include <QMenu>
 #include <QPen>
 #include <cmath>
 #include "layoutscene.h"
+#include "zoneitem.h"
 
 ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect) : QGraphicsRectItem(rect), m_resizeHandle(None), m_name(appName) {
   setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemSendsGeometryChanges);
@@ -19,13 +21,33 @@ ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect) :
   setBrush(QBrush(QColor(60, 60, 60, 200)));
   setPen(QPen(Qt::black, 1));
 
+  // App Name Label (Top Left)
   QGraphicsTextItem* text = new QGraphicsTextItem(appName, this);
   text->setDefaultTextColor(Qt::lightGray);
-  text->setPos(10, 10);
+  text->setPos(5, 5);
+
+  // NEW: Status Label (Bottom Left, Smaller font)
+  m_statusText = new QGraphicsTextItem("", this);
+  m_statusText->setDefaultTextColor(QColor(200, 200, 200));
+  QFont font = m_statusText->font();
+  font.setPointSize(8);
+  m_statusText->setFont(font);
+
+  updateStatusText();  // Initial update
 }
 
 QString ResizableAppItem::name() const {
   return m_name;
+}
+
+void ResizableAppItem::updateStatusText() {
+  // Format: X, Y (WxH)
+  QString status = QString("%1, %2 (%3x%4)").arg((int)pos().x()).arg((int)pos().y()).arg((int)rect().width()).arg((int)rect().height());
+
+  m_statusText->setPlainText(status);
+
+  // Position it at the bottom-left of the rect
+  m_statusText->setPos(5, rect().height() - 20);
 }
 
 double ResizableAppItem::snapToGridVal(double val, int gridSize) {
@@ -38,7 +60,6 @@ bool ResizableAppItem::rangesOverlap(double min1, double len1, double min2, doub
   return max1 > min2 && min1 < max2;
 }
 
-// NEW: Right-Click Menu
 void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
   QMenu menu;
   QAction* raiseAction = menu.addAction("Bring to Front");
@@ -48,13 +69,11 @@ void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
 
   QAction* selectedAction = menu.exec(event->screenPos());
 
-  if (selectedAction == raiseAction) {
-    setZValue(100);  // Higher than others (usually 0)
-    // Update others to ensure this is strictly top if needed,
-    // but for simple layout Z=100 is usually enough.
-  } else if (selectedAction == lowerAction) {
-    setZValue(-1);  // Lower than others, but above background (-1000)
-  } else if (selectedAction == removeAction) {
+  if (selectedAction == raiseAction)
+    setZValue(100);
+  else if (selectedAction == lowerAction)
+    setZValue(-1);
+  else if (selectedAction == removeAction) {
     if (scene()) {
       scene()->removeItem(this);
       delete this;
@@ -66,12 +85,14 @@ QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant&
   if (change == ItemSelectedHasChanged) {
     if (value.toBool()) {
       setPen(QPen(QColor(0, 120, 215), 3));
-      // Note: We removed automatic Z-raising here so users can manually layer windows
+      setZValue(100);
     } else {
       setPen(QPen(Qt::black, 1));
+      setZValue(0);
     }
   }
 
+  // POSITION CHANGE
   if (change == ItemPositionChange && scene()) {
     QPointF newPos = value.toPointF();
     LayoutScene* layoutScene = dynamic_cast<LayoutScene*>(scene());
@@ -164,6 +185,21 @@ QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant&
     if (desiredTop + myRect.height() > validArea.bottom())
       desiredTop = validArea.bottom() - myRect.height();
 
+    // Update text whenever position changes
+    // We defer this slightly or just call updateStatusText() but position is not yet committed to 'pos()'
+    // So we might need to manually format string here or rely on the fact that pos() updates after return.
+    // Actually, we can just use the proposed newPos for the text.
+
+    // However, itemChange is called BEFORE pos() is updated.
+    // We will just let the text update in the next paint cycle or force it here using the new coords.
+    // But since we can't easily set the text based on "future" pos easily in a helper,
+    // we'll update it but we need to pass the new pos.
+
+    // Simpler approach: updateStatusText uses current pos(), which is old.
+    // Let's rely on the fact that scene updates happen frequently.
+    // Or better: Since we return a new point, the item WILL move there.
+    // We can schedule an update.
+
     return QPointF(desiredLeft, desiredTop);
   }
   return QGraphicsRectItem::itemChange(change, value);
@@ -191,9 +227,34 @@ void ResizableAppItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
 
 void ResizableAppItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
   QGraphicsRectItem::mouseReleaseEvent(event);
+
+  if (scene() && m_resizeHandle == None) {
+    QList<QGraphicsItem*> itemsUnderMouse = scene()->items(event->scenePos());
+
+    for (QGraphicsItem* item : itemsUnderMouse) {
+      ZoneItem* zone = dynamic_cast<ZoneItem*>(item);
+      if (zone) {
+        setRect(zone->rect());
+        setPos(zone->pos());
+        break;
+      }
+    }
+  }
+
+  // Always update text on release to be sure
+  updateStatusText();
 }
 
 void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
+  // If moving (not resizing), the base implementation calls itemChange,
+  // but itemChange runs before the pos is updated.
+  // So we manually call updateStatusText() after the base Move logic.
+  if (m_resizeHandle == None) {
+    QGraphicsRectItem::mouseMoveEvent(event);
+    updateStatusText();
+    return;
+  }
+
   if (m_resizeHandle != None) {
     QPointF mouseScenePos = event->scenePos();
     LayoutScene* layoutScene = dynamic_cast<LayoutScene*>(scene());
@@ -289,6 +350,9 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     newRect.setWidth(newW);
     newRect.setHeight(newH);
     setRect(newRect);
+
+    // Update label during resize
+    updateStatusText();
 
   } else {
     QGraphicsRectItem::mouseMoveEvent(event);

@@ -1,12 +1,15 @@
 #include "mainwindow.h"
 #include "layoutscene.h"
 #include "resizableappitem.h"
+#include "rulerbar.h"
+#include "zoneitem.h"
 
 #include <QAction>
 #include <QComboBox>
 #include <QDomDocument>
 #include <QFileDialog>
 #include <QGraphicsView>
+#include <QGridLayout>
 #include <QIcon>
 #include <QKeyEvent>
 #include <QLabel>
@@ -17,37 +20,90 @@
 #include <QStatusBar>
 #include <QTextStream>
 #include <QToolBar>
-#include <algorithm>  // For std::sort
+#include <algorithm>
 #include <cmath>
 
-MainWindow::MainWindow() {
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   resize(1200, 800);
   setWindowTitle("Layout Manager");
 
+  // Create the Custom Scene
   scene = new LayoutScene(0, 0, 1920, 1080, this);
   scene->setItemIndexMethod(QGraphicsScene::NoIndex);
   scene->setTopBarHeight(30);
   scene->setBottomBarHeight(40);
 
+  // Setup View
   view = new QGraphicsView(scene, this);
   view->setBackgroundBrush(this->palette().window());
   view->setRenderHint(QPainter::Antialiasing);
   view->setFrameShape(QFrame::NoFrame);
 
-  // Enable Rubber Band Selection
-  // Clicking and dragging on empty space will now create a selection box
   view->setDragMode(QGraphicsView::RubberBandDrag);
-
   view->setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
   view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   view->setResizeAnchor(QGraphicsView::AnchorViewCenter);
   view->setOptimizationFlags(QGraphicsView::DontSavePainterState | QGraphicsView::DontAdjustForAntialiasing);
 
-  setCentralWidget(view);
+  // --- RULER SETUP ---
+  m_hRuler = new RulerBar(RulerBar::Horizontal, view, this);
+  m_vRuler = new RulerBar(RulerBar::Vertical, view, this);
+
+  // Corner widget (Top-Left void)
+  QWidget* corner = new QWidget(this);
+  corner->setFixedSize(25, 25);
+  corner->setStyleSheet("background-color: #2b2b2b;");
+
+  // Layout: Grid with Rulers surrounding the View
+  QWidget* central = new QWidget(this);
+  QGridLayout* grid = new QGridLayout(central);
+  grid->setSpacing(0);
+  grid->setContentsMargins(0, 0, 0, 0);
+
+  grid->addWidget(corner, 0, 0);
+  grid->addWidget(m_hRuler, 0, 1);
+  grid->addWidget(m_vRuler, 1, 0);
+  grid->addWidget(view, 1, 1);
+
+  setCentralWidget(central);
+
+  // Track Mouse for Ruler Markers
+  view->viewport()->setMouseTracking(true);
+  view->viewport()->installEventFilter(this);
 
   createToolbar();
-  statusBar()->showMessage("Click and drag to select multiple items.");
+  statusBar()->showMessage("Rulers active. Click 'Add Zone' to create snap targets.");
+}
+
+MainWindow::~MainWindow() {
+  // Basic cleanup if needed, QObject hierarchy handles most deletes
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == view->viewport() && event->type() == QEvent::MouseMove) {
+    QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+    QPoint pos = mouseEvent->pos();
+    m_hRuler->updateCursorPos(pos);
+    m_vRuler->updateCursorPos(pos);
+  }
+  return QMainWindow::eventFilter(watched, event);
+}
+
+// Update rulers when zooming/panning occurs during resize
+void MainWindow::resizeEvent(QResizeEvent* event) {
+  QMainWindow::resizeEvent(event);
+  if (view && scene) {
+    view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
+    // Force rulers to repaint with new scale
+    m_hRuler->update();
+    m_vRuler->update();
+  }
+}
+
+void MainWindow::updateRulers() {
+  m_hRuler->update();
+  m_vRuler->update();
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
@@ -58,28 +114,26 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
   }
 }
 
-void MainWindow::resizeEvent(QResizeEvent* event) {
-  QMainWindow::resizeEvent(event);
-  if (view && scene) {
-    view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
-  }
-}
-
 void MainWindow::toggleGrid(bool checked) {
   scene->setGridEnabled(checked);
   gridSlider->setEnabled(checked);
+  updateRulers();  // Grid might affect visual clarity, good to redraw
 }
 
 void MainWindow::onGridSizeChanged(int val) {
   scene->setGridSize(val);
-  gridLabel->setText(QString::number(val) + "px");
+  if (gridLabel)
+    gridLabel->setText(QString::number(val) + "px");
+  updateRulers();
 }
 
 void MainWindow::onTopBarChanged(int val) {
   scene->setTopBarHeight(val);
+  updateRulers();
 }
 void MainWindow::onBotBarChanged(int val) {
   scene->setBottomBarHeight(val);
+  updateRulers();
 }
 
 void MainWindow::addWindow() {
@@ -107,10 +161,18 @@ void MainWindow::addWindow() {
   scene->addItem(item);
 }
 
+void MainWindow::addZone() {
+  ZoneItem* zone = new ZoneItem(QRectF(0, 0, 400, 400));
+  QRectF safe = scene->getWorkingArea();
+  zone->setPos(safe.center().x() - 200, safe.center().y() - 200);
+  scene->addItem(zone);
+  statusBar()->showMessage("Zone added. Drop apps onto it to snap.", 3000);
+}
+
 void MainWindow::removeWindow() {
   QList<QGraphicsItem*> selected = scene->selectedItems();
   for (auto item : selected) {
-    if (dynamic_cast<ResizableAppItem*>(item)) {
+    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item)) {
       scene->removeItem(item);
       delete item;
     }
@@ -181,22 +243,17 @@ void MainWindow::loadLayout() {
   }
 }
 
-// --- ALIGNMENT LOGIC ---
-
 void MainWindow::alignLeft() {
   QList<QGraphicsItem*> selected = scene->selectedItems();
   if (selected.size() < 2) {
     statusBar()->showMessage("Select at least 2 items to align.", 2000);
     return;
   }
-
-  // Find absolute min X among selection
   qreal minX = std::numeric_limits<qreal>::max();
   for (auto item : selected) {
     if (dynamic_cast<ResizableAppItem*>(item))
       minX = std::min(minX, item->pos().x());
   }
-
   for (auto item : selected) {
     if (dynamic_cast<ResizableAppItem*>(item))
       item->setPos(minX, item->pos().y());
@@ -209,13 +266,11 @@ void MainWindow::alignRight() {
     statusBar()->showMessage("Select at least 2 items to align.", 2000);
     return;
   }
-
   qreal maxRight = -std::numeric_limits<qreal>::max();
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item))
       maxRight = std::max(maxRight, app->pos().x() + app->rect().width());
   }
-
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item))
       app->setPos(maxRight - app->rect().width(), app->pos().y());
@@ -228,13 +283,11 @@ void MainWindow::alignTop() {
     statusBar()->showMessage("Select at least 2 items to align.", 2000);
     return;
   }
-
   qreal minY = std::numeric_limits<qreal>::max();
   for (auto item : selected) {
     if (dynamic_cast<ResizableAppItem*>(item))
       minY = std::min(minY, item->pos().y());
   }
-
   for (auto item : selected) {
     if (dynamic_cast<ResizableAppItem*>(item))
       item->setPos(item->pos().x(), minY);
@@ -247,13 +300,11 @@ void MainWindow::alignBottom() {
     statusBar()->showMessage("Select at least 2 items to align.", 2000);
     return;
   }
-
   qreal maxBottom = -std::numeric_limits<qreal>::max();
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item))
       maxBottom = std::max(maxBottom, app->pos().y() + app->rect().height());
   }
-
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item))
       app->setPos(app->pos().x(), maxBottom - app->rect().height());
@@ -266,8 +317,6 @@ void MainWindow::alignCenterH() {
     statusBar()->showMessage("Select at least 2 items to align.", 2000);
     return;
   }
-
-  // FIX: Calculate bounding rect manually. scene->selectionArea() is unreliable for individual clicks.
   QRectF totalRect;
   bool first = true;
   for (auto item : selected) {
@@ -279,9 +328,7 @@ void MainWindow::alignCenterH() {
         totalRect = totalRect.united(item->sceneBoundingRect());
     }
   }
-
   qreal centerX = totalRect.center().x();
-
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item))
       app->setPos(centerX - (app->rect().width() / 2), app->pos().y());
@@ -294,7 +341,6 @@ void MainWindow::alignCenterV() {
     statusBar()->showMessage("Select at least 2 items to align.", 2000);
     return;
   }
-
   QRectF totalRect;
   bool first = true;
   for (auto item : selected) {
@@ -306,9 +352,7 @@ void MainWindow::alignCenterV() {
         totalRect = totalRect.united(item->sceneBoundingRect());
     }
   }
-
   qreal centerY = totalRect.center().y();
-
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item))
       app->setPos(app->pos().x(), centerY - (app->rect().height() / 2));
@@ -321,33 +365,21 @@ void MainWindow::distributeH() {
     statusBar()->showMessage("Select at least 3 items to distribute.", 2000);
     return;
   }
-
-  // Sort items by X position
   std::sort(selected.begin(), selected.end(), [](QGraphicsItem* a, QGraphicsItem* b) { return a->pos().x() < b->pos().x(); });
-
   QGraphicsItem* first = selected.first();
   QGraphicsItem* last = selected.last();
-
   ResizableAppItem* firstApp = dynamic_cast<ResizableAppItem*>(first);
   ResizableAppItem* lastApp = dynamic_cast<ResizableAppItem*>(last);
   if (!firstApp || !lastApp)
     return;
-
-  // Total width of all items
   qreal totalItemWidth = 0;
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item))
       totalItemWidth += app->rect().width();
   }
-
-  // Span from Left of first to Right of last
   qreal totalSpan = (lastApp->pos().x() + lastApp->rect().width()) - firstApp->pos().x();
-
-  // Calculate gap
   qreal totalGap = totalSpan - totalItemWidth;
   qreal gap = totalGap / (selected.size() - 1);
-
-  // Apply positions
   qreal currentX = firstApp->pos().x();
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item)) {
@@ -363,27 +395,21 @@ void MainWindow::distributeV() {
     statusBar()->showMessage("Select at least 3 items to distribute.", 2000);
     return;
   }
-
   std::sort(selected.begin(), selected.end(), [](QGraphicsItem* a, QGraphicsItem* b) { return a->pos().y() < b->pos().y(); });
-
   QGraphicsItem* first = selected.first();
   QGraphicsItem* last = selected.last();
-
   ResizableAppItem* firstApp = dynamic_cast<ResizableAppItem*>(first);
   ResizableAppItem* lastApp = dynamic_cast<ResizableAppItem*>(last);
   if (!firstApp || !lastApp)
     return;
-
   qreal totalItemHeight = 0;
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item))
       totalItemHeight += app->rect().height();
   }
-
   qreal totalSpan = (lastApp->pos().y() + lastApp->rect().height()) - firstApp->pos().y();
   qreal totalGap = totalSpan - totalItemHeight;
   qreal gap = totalGap / (selected.size() - 1);
-
   qreal currentY = firstApp->pos().y();
   for (auto item : selected) {
     if (auto app = dynamic_cast<ResizableAppItem*>(item)) {
@@ -397,19 +423,17 @@ void MainWindow::createToolbar() {
   QToolBar* toolbar = addToolBar("Tools");
   toolbar->setIconSize(QSize(24, 24));
 
-  // File Actions
   connect(toolbar->addAction(QIcon(":/icons/save.svg"), "Save"), &QAction::triggered, this, &MainWindow::saveLayout);
   connect(toolbar->addAction(QIcon(":/icons/load.svg"), "Load"), &QAction::triggered, this, &MainWindow::loadLayout);
 
   toolbar->addSeparator();
 
-  // Edit Actions
-  connect(toolbar->addAction(QIcon(":/icons/add.svg"), "Add"), &QAction::triggered, this, &MainWindow::addWindow);
+  connect(toolbar->addAction(QIcon(":/icons/add.svg"), "Add Window"), &QAction::triggered, this, &MainWindow::addWindow);
+  connect(toolbar->addAction(QIcon(":/icons/zone.svg"), "Add Zone"), &QAction::triggered, this, &MainWindow::addZone);
   connect(toolbar->addAction(QIcon(":/icons/remove.svg"), "Remove"), &QAction::triggered, this, &MainWindow::removeWindow);
 
   toolbar->addSeparator();
 
-  // Alignment Actions
   connect(toolbar->addAction(QIcon(":/icons/align-left.svg"), "Align Left"), &QAction::triggered, this, &MainWindow::alignLeft);
   connect(toolbar->addAction(QIcon(":/icons/align-center-h.svg"), "Align Center H"), &QAction::triggered, this, &MainWindow::alignCenterH);
   connect(toolbar->addAction(QIcon(":/icons/align-right.svg"), "Align Right"), &QAction::triggered, this, &MainWindow::alignRight);
@@ -423,7 +447,6 @@ void MainWindow::createToolbar() {
 
   toolbar->addSeparator();
 
-  // Settings
   QAction* gridAct = toolbar->addAction(QIcon(":/icons/grid.svg"), "Grid");
   gridAct->setCheckable(true);
   connect(gridAct, &QAction::toggled, this, &MainWindow::toggleGrid);
@@ -435,6 +458,11 @@ void MainWindow::createToolbar() {
   gridSlider->setEnabled(false);
   connect(gridSlider, &QSlider::valueChanged, this, &MainWindow::onGridSizeChanged);
   toolbar->addWidget(gridSlider);
+
+  // FIX: Added gridLabel initialization which was missing in original snippet
+  // but required for onGridSizeChanged to work without crashing.
+  gridLabel = new QLabel("50px");
+  toolbar->addWidget(gridLabel);
 
   toolbar->addWidget(new QLabel(" T:"));
   QSpinBox* topSpin = new QSpinBox();
