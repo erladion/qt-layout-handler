@@ -150,9 +150,18 @@ void RulerBar::paintEvent(QPaintEvent* event) {
   else if (scale < 0.2)
     step = 500;
 
+  // FIX: Use integer loop counter
+  // Determine number of steps to draw
   double firstTick = std::floor(start / step) * step;
+  int numTicks = std::ceil((end - firstTick) / step);
 
-  for (double v = firstTick; v <= end; v += step) {
+  for (int i = 0; i <= numTicks; ++i) {
+    // Calculate v based on index to ensure precision
+    double v = firstTick + (i * step);
+
+    if (v > end)
+      break;  // Safety break
+
     QPointF widgetPt;
     if (m_orientation == Horizontal)
       widgetPt = m_view->mapFromScene(v, 0);
@@ -161,6 +170,8 @@ void RulerBar::paintEvent(QPaintEvent* event) {
 
     int pos = (m_orientation == Horizontal) ? widgetPt.x() : widgetPt.y();
 
+    // Simple culling if mapFromScene returns something way off (though loop handles logic)
+    // Draw Ticks
     if (m_orientation == Horizontal) {
       p.drawLine(pos, 15, pos, 25);
       p.drawText(pos + 2, 12, QString::number((int)v));

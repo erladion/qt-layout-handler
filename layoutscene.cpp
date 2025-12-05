@@ -92,17 +92,26 @@ static QVector<QLineF> calculateGridLines(int gridSize, QRectF workArea) {
   int estimated = (workArea.width() / gridSize) + (workArea.height() / gridSize) + 2;
   lines.reserve(estimated);
 
-  qreal startX = std::round(workArea.left() / gridSize) * gridSize;
-  for (qreal x = startX; x <= workArea.right(); x += gridSize) {
-    if (x >= workArea.left())
+  // FIX: Use integer math for loops to avoid floating point accumulation errors
+  // Calculate the starting integer index for the grid lines relative to 0
+  long long startXIndex = std::ceil(workArea.left() / (double)gridSize);
+  long long endXIndex = std::floor(workArea.right() / (double)gridSize);
+
+  for (long long i = startXIndex; i <= endXIndex; ++i) {
+    qreal x = i * gridSize;
+    if (x >= workArea.left() && x <= workArea.right())  // Double check bounds
       lines.append(QLineF(x, workArea.top(), x, workArea.bottom()));
   }
 
-  qreal startY = std::round(workArea.top() / gridSize) * gridSize;
-  for (qreal y = startY; y <= workArea.bottom(); y += gridSize) {
-    if (y >= workArea.top())
+  long long startYIndex = std::ceil(workArea.top() / (double)gridSize);
+  long long endYIndex = std::floor(workArea.bottom() / (double)gridSize);
+
+  for (long long i = startYIndex; i <= endYIndex; ++i) {
+    qreal y = i * gridSize;
+    if (y >= workArea.top() && y <= workArea.bottom())
       lines.append(QLineF(workArea.left(), y, workArea.right(), y));
   }
+
   return lines;
 }
 
