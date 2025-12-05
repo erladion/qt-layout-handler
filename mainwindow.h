@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QMainWindow>
 #include <QSlider>
+#include "snappingitemgroup.h"
 
 // Forward declarations
 class LayoutScene;
@@ -23,7 +24,7 @@ public:
 protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
-  void keyPressEvent(QKeyEvent* event) override;
+  // Removed keyPressEvent override as QActions handle shortcuts now
 
 private slots:
   // UI Slots
@@ -76,9 +77,6 @@ private:
   // Rulers
   RulerBar* m_hRuler;
   RulerBar* m_vRuler;
-
-  // REMOVED: QGraphicsPixmapItem* wallpaperItem = nullptr;
-  // Wallpaper is now handled by the Scene/Artboard directly
 
   // UI Controls
   QSlider* gridSlider;

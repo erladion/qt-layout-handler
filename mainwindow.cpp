@@ -24,6 +24,7 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTextStream>
+#include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 #include <algorithm>
@@ -43,10 +44,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   view->setRenderHint(QPainter::Antialiasing);
   view->setFrameShape(QFrame::NoFrame);
 
+  // Removed explicit alignment to restore default centering behavior
+  // view->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+
   view->setDragMode(QGraphicsView::RubberBandDrag);
   view->setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
+
   view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
   view->setResizeAnchor(QGraphicsView::AnchorViewCenter);
   view->setOptimizationFlags(QGraphicsView::DontSavePainterState | QGraphicsView::DontAdjustForAntialiasing);
 
@@ -77,6 +83,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
   createToolbar();
   statusBar()->showMessage("Rulers active. Drag from rulers to create Guides.");
+
+  // Keep the startup fix to ensure fitInView works correctly on launch
+  QTimer::singleShot(100, this, [this]() {
+    if (view && scene) {
+      view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
+      m_hRuler->update();
+      m_vRuler->update();
+    }
+  });
 }
 
 MainWindow::~MainWindow() {}
@@ -85,9 +100,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (event->type() == QEvent::MouseMove) {
     QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
     QPoint globalPos = mouseEvent->globalPos();
-
     QPoint viewPos = view->viewport()->mapFromGlobal(globalPos);
-
     m_hRuler->updateCursorPos(viewPos);
     m_vRuler->updateCursorPos(viewPos);
   }
@@ -97,7 +110,9 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
 void MainWindow::resizeEvent(QResizeEvent* event) {
   QMainWindow::resizeEvent(event);
   if (view && scene) {
-    view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
+    if (view->width() > 50 && view->height() > 50) {
+      view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
+    }
     m_hRuler->update();
     m_vRuler->update();
   }
@@ -108,26 +123,7 @@ void MainWindow::updateRulers() {
   m_vRuler->update();
 }
 
-void MainWindow::keyPressEvent(QKeyEvent* event) {
-  if ((event->modifiers() & Qt::ControlModifier) && event->key() == Qt::Key_G) {
-    groupItems();
-    return;
-  }
-  if ((event->modifiers() & Qt::ControlModifier) && event->key() == Qt::Key_U) {
-    ungroupItems();
-    return;
-  }
-  if ((event->modifiers() & Qt::ControlModifier) && event->key() == Qt::Key_L) {
-    toggleLock();
-    return;
-  }
-
-  if (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) {
-    removeWindow();
-  } else {
-    QMainWindow::keyPressEvent(event);
-  }
-}
+// REMOVED keyPressEvent implementation
 
 void MainWindow::toggleGrid(bool checked) {
   scene->setGridEnabled(checked);
@@ -378,228 +374,46 @@ void MainWindow::loadLayout() {
   statusBar()->showMessage("Layout loaded from file.", 3000);
 }
 
+// --- DELEGATE ALIGNMENT TO SCENE ---
 void MainWindow::alignLeft() {
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.isEmpty())
-    return;
-
-  if (selected.size() == 1) {
-    QGraphicsItem* item = selected.first();
-    // Only align supported items (Apps, Zones, Groups)
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<QGraphicsItemGroup*>(item)) {
-      QRectF safe = scene->getWorkingArea();
-      // Move by difference between Workspace Left and Item Left
-      item->moveBy(safe.left() - item->sceneBoundingRect().left(), 0);
-    }
-    return;
-  }
-
-  qreal minX = std::numeric_limits<qreal>::max();
-  for (auto item : selected)
-    if (dynamic_cast<ResizableAppItem*>(item))
-      minX = std::min(minX, item->pos().x());
-  for (auto item : selected)
-    if (dynamic_cast<ResizableAppItem*>(item))
-      item->setPos(minX, item->pos().y());
+  scene->alignSelectionLeft();
 }
-
 void MainWindow::alignRight() {
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.isEmpty())
-    return;
-
-  if (selected.size() == 1) {
-    QGraphicsItem* item = selected.first();
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<QGraphicsItemGroup*>(item)) {
-      QRectF safe = scene->getWorkingArea();
-      // Move by difference between Workspace Right and Item Right
-      item->moveBy(safe.right() - item->sceneBoundingRect().right(), 0);
-    }
-    return;
-  }
-
-  qreal maxRight = -std::numeric_limits<qreal>::max();
-  for (auto item : selected)
-    if (auto app = dynamic_cast<ResizableAppItem*>(item))
-      maxRight = std::max(maxRight, app->pos().x() + app->rect().width());
-  for (auto item : selected)
-    if (auto app = dynamic_cast<ResizableAppItem*>(item))
-      app->setPos(maxRight - app->rect().width(), app->pos().y());
+  scene->alignSelectionRight();
 }
-
 void MainWindow::alignTop() {
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.isEmpty())
-    return;
-
-  if (selected.size() == 1) {
-    QGraphicsItem* item = selected.first();
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<QGraphicsItemGroup*>(item)) {
-      QRectF safe = scene->getWorkingArea();
-      item->moveBy(0, safe.top() - item->sceneBoundingRect().top());
-    }
-    return;
-  }
-
-  qreal minY = std::numeric_limits<qreal>::max();
-  for (auto item : selected)
-    if (dynamic_cast<ResizableAppItem*>(item))
-      minY = std::min(minY, item->pos().y());
-  for (auto item : selected)
-    if (dynamic_cast<ResizableAppItem*>(item))
-      item->setPos(item->pos().x(), minY);
+  scene->alignSelectionTop();
 }
-
 void MainWindow::alignBottom() {
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.isEmpty())
-    return;
-
-  if (selected.size() == 1) {
-    QGraphicsItem* item = selected.first();
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<QGraphicsItemGroup*>(item)) {
-      QRectF safe = scene->getWorkingArea();
-      item->moveBy(0, safe.bottom() - item->sceneBoundingRect().bottom());
-    }
-    return;
-  }
-
-  qreal maxBottom = -std::numeric_limits<qreal>::max();
-  for (auto item : selected)
-    if (auto app = dynamic_cast<ResizableAppItem*>(item))
-      maxBottom = std::max(maxBottom, app->pos().y() + app->rect().height());
-  for (auto item : selected)
-    if (auto app = dynamic_cast<ResizableAppItem*>(item))
-      app->setPos(app->pos().x(), maxBottom - app->rect().height());
+  scene->alignSelectionBottom();
 }
-
 void MainWindow::alignCenterH() {
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.isEmpty())
-    return;
-
-  if (selected.size() == 1) {
-    QGraphicsItem* item = selected.first();
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<QGraphicsItemGroup*>(item)) {
-      QRectF safe = scene->getWorkingArea();
-      // Center = WorkspaceCenter - HalfItemWidth
-      // OR MoveBy(TargetCenter - CurrentCenter)
-      qreal targetCenter = safe.center().x();
-      qreal currentCenter = item->sceneBoundingRect().center().x();
-      item->moveBy(targetCenter - currentCenter, 0);
-    }
-    return;
-  }
-
-  QRectF totalRect;
-  bool first = true;
-  for (auto item : selected) {
-    if (dynamic_cast<ResizableAppItem*>(item)) {
-      if (first) {
-        totalRect = item->sceneBoundingRect();
-        first = false;
-      } else
-        totalRect = totalRect.united(item->sceneBoundingRect());
-    }
-  }
-  qreal centerX = totalRect.center().x();
-  for (auto item : selected)
-    if (auto app = dynamic_cast<ResizableAppItem*>(item))
-      app->setPos(centerX - (app->rect().width() / 2), app->pos().y());
+  scene->alignSelectionCenterH();
 }
-
 void MainWindow::alignCenterV() {
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.isEmpty())
-    return;
-
-  if (selected.size() == 1) {
-    QGraphicsItem* item = selected.first();
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<QGraphicsItemGroup*>(item)) {
-      QRectF safe = scene->getWorkingArea();
-      qreal targetCenter = safe.center().y();
-      qreal currentCenter = item->sceneBoundingRect().center().y();
-      item->moveBy(0, targetCenter - currentCenter);
-    }
-    return;
-  }
-
-  QRectF totalRect;
-  bool first = true;
-  for (auto item : selected) {
-    if (dynamic_cast<ResizableAppItem*>(item)) {
-      if (first) {
-        totalRect = item->sceneBoundingRect();
-        first = false;
-      } else
-        totalRect = totalRect.united(item->sceneBoundingRect());
-    }
-  }
-  qreal centerY = totalRect.center().y();
-  for (auto item : selected)
-    if (auto app = dynamic_cast<ResizableAppItem*>(item))
-      app->setPos(app->pos().x(), centerY - (app->rect().height() / 2));
+  scene->alignSelectionCenterV();
 }
-
 void MainWindow::distributeH() {
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.size() < 3)
-    return;
-  std::sort(selected.begin(), selected.end(), [](QGraphicsItem* a, QGraphicsItem* b) { return a->pos().x() < b->pos().x(); });
-  ResizableAppItem* firstApp = dynamic_cast<ResizableAppItem*>(selected.first());
-  ResizableAppItem* lastApp = dynamic_cast<ResizableAppItem*>(selected.last());
-  if (!firstApp || !lastApp)
-    return;
-  qreal totalItemWidth = 0;
-  for (auto item : selected)
-    if (auto app = dynamic_cast<ResizableAppItem*>(item))
-      totalItemWidth += app->rect().width();
-  qreal totalSpan = (lastApp->pos().x() + lastApp->rect().width()) - firstApp->pos().x();
-  qreal gap = (totalSpan - totalItemWidth) / (selected.size() - 1);
-  qreal currentX = firstApp->pos().x();
-  for (auto item : selected) {
-    if (auto app = dynamic_cast<ResizableAppItem*>(item)) {
-      app->setPos(currentX, app->pos().y());
-      currentX += app->rect().width() + gap;
-    }
-  }
+  scene->distributeSelectionH();
 }
-
 void MainWindow::distributeV() {
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.size() < 3)
-    return;
-  std::sort(selected.begin(), selected.end(), [](QGraphicsItem* a, QGraphicsItem* b) { return a->pos().y() < b->pos().y(); });
-  ResizableAppItem* firstApp = dynamic_cast<ResizableAppItem*>(selected.first());
-  ResizableAppItem* lastApp = dynamic_cast<ResizableAppItem*>(selected.last());
-  if (!firstApp || !lastApp)
-    return;
-  qreal totalItemHeight = 0;
-  for (auto item : selected)
-    if (auto app = dynamic_cast<ResizableAppItem*>(item))
-      totalItemHeight += app->rect().height();
-  qreal totalSpan = (lastApp->pos().y() + lastApp->rect().height()) - firstApp->pos().y();
-  qreal gap = (totalSpan - totalItemHeight) / (selected.size() - 1);
-  qreal currentY = firstApp->pos().y();
-  for (auto item : selected) {
-    if (auto app = dynamic_cast<ResizableAppItem*>(item)) {
-      app->setPos(app->pos().x(), currentY);
-      currentY += app->rect().height() + gap;
-    }
-  }
+  scene->distributeSelectionV();
 }
 
 void MainWindow::createToolbar() {
   QToolBar* toolbar = addToolBar("Tools");
   toolbar->setIconSize(QSize(24, 24));
 
-  connect(toolbar->addAction(QIcon(":/icons/save.svg"), "Save"), &QAction::triggered, this, &MainWindow::saveLayout);
-  connect(toolbar->addAction(QIcon(":/icons/load.svg"), "Load"), &QAction::triggered, this, &MainWindow::loadLayout);
+  QAction* saveAct = toolbar->addAction(QIcon(":/icons/save.svg"), "Save");
+  saveAct->setShortcut(QKeySequence::Save);
+  connect(saveAct, &QAction::triggered, this, &MainWindow::saveLayout);
 
-  // --- NEW ACTIONS ---
+  QAction* loadAct = toolbar->addAction(QIcon(":/icons/load.svg"), "Load");
+  loadAct->setShortcut(QKeySequence::Open);
+  connect(loadAct, &QAction::triggered, this, &MainWindow::loadLayout);
+
   connect(toolbar->addAction(QIcon(":/icons/image.svg"), "Wallpaper"), &QAction::triggered, this, &MainWindow::setWallpaper);
 
-  // Template Menu
   QToolButton* tempBtn = new QToolButton();
   tempBtn->setText("Templates");
   tempBtn->setIcon(QIcon(":/icons/template.svg"));
@@ -615,17 +429,23 @@ void MainWindow::createToolbar() {
 
   connect(toolbar->addAction(QIcon(":/icons/add.svg"), "Add Window"), &QAction::triggered, this, &MainWindow::addWindow);
   connect(toolbar->addAction(QIcon(":/icons/zone.svg"), "Add Zone"), &QAction::triggered, this, &MainWindow::addZone);
-  connect(toolbar->addAction(QIcon(":/icons/remove.svg"), "Remove"), &QAction::triggered, this, &MainWindow::removeWindow);
 
-  // Feature 6 & 7 Buttons
+  QAction* removeAct = toolbar->addAction(QIcon(":/icons/remove.svg"), "Remove");
+  // Set both Delete and Backspace as shortcuts
+  removeAct->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
+  connect(removeAct, &QAction::triggered, this, &MainWindow::removeWindow);
+
   toolbar->addSeparator();
   QAction* lockAct = toolbar->addAction(QIcon(":/icons/lock.svg"), "Lock");
+  lockAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
   connect(lockAct, &QAction::triggered, this, &MainWindow::toggleLock);
 
   QAction* grpAct = toolbar->addAction(QIcon(":/icons/group.svg"), "Group");
+  grpAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
   connect(grpAct, &QAction::triggered, this, &MainWindow::groupItems);
 
   QAction* ungrpAct = toolbar->addAction(QIcon(":/icons/ungroup.svg"), "Ungroup");
+  ungrpAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
   connect(ungrpAct, &QAction::triggered, this, &MainWindow::ungroupItems);
 
   toolbar->addSeparator();
