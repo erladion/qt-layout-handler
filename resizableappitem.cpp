@@ -38,7 +38,7 @@ ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
   m_statusText = new QGraphicsTextItem("", this);
   m_statusText->setDefaultTextColor(QColor(200, 200, 200));
   QFont statusFont = m_statusText->font();
-  statusFont.setPointSize(10);
+  statusFont.setPointSize(12);  // Increased base size
   m_statusText->setFont(statusFont);
 
   updateStatusText();
@@ -52,15 +52,18 @@ void ResizableAppItem::setFontScale(qreal scale) {
   if (scale <= 0)
     return;
 
-  // Base sizes: Title 20pt, Status 10pt
-  // We scale these relative to the layout resolution
+  // Scale Title (Base 20pt)
   QFont titleFont = m_titleText->font();
   titleFont.setPointSizeF(20.0 * scale);
   m_titleText->setFont(titleFont);
 
+  // Scale Status/Location Text (Base 12pt)
   QFont statusFont = m_statusText->font();
-  statusFont.setPointSizeF(10.0 * scale);
+  statusFont.setPointSizeF(12.0 * scale);
   m_statusText->setFont(statusFont);
+
+  // Force re-calculation of text position (so it stays at bottom)
+  updateStatusText();
 }
 
 void ResizableAppItem::setLocked(bool locked) {
@@ -79,8 +82,7 @@ void ResizableAppItem::updateStatusText() {
     status += " [LOCKED]";
   m_statusText->setPlainText(status);
 
-  // Adjust position based on font size (approx)
-  // We want it at bottom left, so we subtract height
+  // Adjust position based on new font height
   qreal h = m_statusText->boundingRect().height();
   m_statusText->setPos(5, rect().height() - h);
 }
@@ -306,7 +308,7 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (newH < 50)
       newH = 50;
 
-    setRect(0, 0, newW, newH);  // Assuming rect starts at 0,0
+    setRect(0, 0, newW, newH);
     updateStatusText();
 
   } else {
