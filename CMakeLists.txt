@@ -37,6 +37,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         guidelineitem.cpp
         snappingutils.h snappingutils.cpp
         layoutserializer.h layoutserializer.cpp
+        propertiesdialog.h propertiesdialog.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET layoutmanager APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

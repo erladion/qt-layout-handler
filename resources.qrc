@@ -19,5 +19,7 @@
         <file>icons/template.svg</file>
         <file>icons/ungroup.svg</file>
         <file>icons/zone.svg</file>
+        <file>resources/spin-down.svg</file>
+        <file>resources/spin-up.svg</file>
     </qresource>
 </RCC>

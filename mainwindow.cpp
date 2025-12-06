@@ -1,7 +1,8 @@
 #include "mainwindow.h"
 #include "guidelineitem.h"
 #include "layoutscene.h"
-#include "layoutserializer.h"  // NEW
+#include "layoutserializer.h"
+#include "propertiesdialog.h"
 #include "resizableappitem.h"
 #include "rulerbar.h"
 #include "snappingitemgroup.h"
@@ -19,6 +20,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QRandomGenerator>
 #include <QSlider>
@@ -39,6 +41,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   scene->setItemIndexMethod(QGraphicsScene::NoIndex);
   scene->setTopBarHeight(30);
   scene->setBottomBarHeight(40);
+
+  // Connect Selection Logic for Properties Window
+  connect(scene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
+  // Restore Scene Changed connection for live updates
+  connect(scene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
 
   view = new QGraphicsView(scene, this);
   view->setBackgroundBrush(this->palette().window());
@@ -79,10 +86,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   m_hRuler->installEventFilter(this);
   m_vRuler->installEventFilter(this);
 
+  // Initialize Properties Dialog (Hidden by default)
+  // FIX: Reverted parent to 'view' so it stays contained within the application
+  // and behaves like an internal tool window.
+  m_propDialog = new PropertiesDialog(view);
+  m_propDialog->hide();
+  m_propDialog->move(20, 20);  // Initial position inside the view
+
   createToolbar();
+  createMenuBar();
+
   statusBar()->showMessage("Rulers active. Drag from rulers to create Guides.");
 
-  // Keep the startup fix to ensure fitInView works correctly on launch
+  // FIX: Startup Scale Fix
   QTimer::singleShot(100, this, [this]() {
     if (view && scene) {
       view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
@@ -92,7 +108,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
 }
 
-MainWindow::~MainWindow() {}
+MainWindow::~MainWindow() {
+  // m_propDialog is automatically deleted because it is a child of 'view'
+}
+
+// ... event filters and existing logic ...
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (event->type() == QEvent::MouseMove) {
@@ -143,8 +163,58 @@ void MainWindow::onBotBarChanged(int val) {
   updateRulers();
 }
 
-void MainWindow::addWindow() {
-  QString type = typeCombo->currentText();
+// --- Properties Logic ---
+
+void MainWindow::toggleProperties() {
+  if (m_propDialog->isVisible()) {
+    m_propDialog->hide();
+    m_viewPropAct->setChecked(false);
+  } else {
+    m_propDialog->show();
+    m_propDialog->raise();  // Ensure it's on top of the canvas
+    m_propDialog->activateWindow();
+    m_viewPropAct->setChecked(true);
+
+    // Force update immediately
+    if (!scene->selectedItems().isEmpty()) {
+      m_propDialog->setItem(scene->selectedItems().first());
+    } else {
+      m_propDialog->setItem(nullptr);
+    }
+  }
+}
+
+void MainWindow::onSelectionChanged() {
+  if (!m_propDialog->isVisible())
+    return;
+
+  QList<QGraphicsItem*> sel = scene->selectedItems();
+
+  if (sel.isEmpty()) {
+    // Debounce selection clearing
+    QTimer::singleShot(50, this, [this]() {
+      if (scene->selectedItems().isEmpty()) {
+        m_propDialog->setItem(nullptr);
+      }
+    });
+  } else {
+    m_propDialog->setItem(sel.first());
+    m_propDialog->raise();
+  }
+}
+
+void MainWindow::onSceneChanged(const QList<QRectF>& region) {
+  Q_UNUSED(region);
+  // Refresh properties if dialog is visible and something is selected
+  if (m_propDialog && m_propDialog->isVisible() && !scene->selectedItems().isEmpty()) {
+    m_propDialog->refreshValues();
+  }
+}
+
+// -------------------------
+
+void MainWindow::addApp(QAction* action) {
+  QString type = action->text();
   double w = 400, h = 300;
   if (type == "Browser") {
     w = 800;
@@ -154,7 +224,6 @@ void MainWindow::addWindow() {
     h = 400;
   }
 
-  // REFACTOR: Use Scene Factory
   ResizableAppItem* item = scene->addAppItem(type, QRectF(0, 0, w, h));
   QRectF safe = scene->getWorkingArea();
 
@@ -314,7 +383,6 @@ void MainWindow::applyTemplate(QAction* action) {
   if (xmlContent.isEmpty())
     return;
 
-  // Use Serializer
   if (LayoutSerializer::loadFromXml(scene, xmlContent)) {
     statusBar()->showMessage("Applied template: " + presetName, 3000);
   } else {
@@ -346,6 +414,15 @@ void MainWindow::loadLayout() {
   }
 }
 
+void MainWindow::createMenuBar() {
+  QMenu* viewMenu = menuBar()->addMenu("View");
+
+  m_viewPropAct = viewMenu->addAction("Properties Window");
+  m_viewPropAct->setCheckable(true);
+  m_viewPropAct->setShortcut(QKeySequence("F2"));
+  connect(m_viewPropAct, &QAction::triggered, this, &MainWindow::toggleProperties);
+}
+
 void MainWindow::createToolbar() {
   QToolBar* toolbar = addToolBar("Tools");
   toolbar->setIconSize(QSize(24, 24));
@@ -373,7 +450,19 @@ void MainWindow::createToolbar() {
 
   toolbar->addSeparator();
 
-  connect(toolbar->addAction(QIcon(":/icons/add.svg"), "Add Window"), &QAction::triggered, this, &MainWindow::addWindow);
+  QToolButton* addBtn = new QToolButton();
+  addBtn->setText("Add App");
+  addBtn->setIcon(QIcon(":/icons/add.svg"));
+  addBtn->setPopupMode(QToolButton::InstantPopup);
+  QMenu* addMenu = new QMenu(addBtn);
+  addMenu->addAction("Browser");
+  addMenu->addAction("Terminal");
+  addMenu->addAction("Music Player");
+  addMenu->addAction("File Manager");
+  addBtn->setMenu(addMenu);
+  connect(addMenu, &QMenu::triggered, this, &MainWindow::addApp);
+  toolbar->addWidget(addBtn);
+
   connect(toolbar->addAction(QIcon(":/icons/zone.svg"), "Add Zone"), &QAction::triggered, this, &MainWindow::addZone);
 
   QAction* removeAct = toolbar->addAction(QIcon(":/icons/remove.svg"), "Remove");
@@ -438,8 +527,4 @@ void MainWindow::createToolbar() {
   botSpin->setSuffix("px");
   connect(botSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::onBotBarChanged);
   toolbar->addWidget(botSpin);
-
-  typeCombo = new QComboBox();
-  typeCombo->addItems({"Browser", "Terminal", "Music Player", "File Manager"});
-  toolbar->addWidget(typeCombo);
 }
