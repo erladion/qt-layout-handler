@@ -1,4 +1,8 @@
 #include "resizableappitem.h"
+#include "layoutscene.h"
+#include "snappingutils.h"
+#include "zoneitem.h"
+
 #include <QAction>
 #include <QBrush>
 #include <QCursor>
@@ -9,10 +13,6 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPen>
-#include <cmath>
-#include "layoutscene.h"
-#include "snappingutils.h"
-#include "zoneitem.h"
 
 ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
     : QGraphicsRectItem(rect), m_resizeHandle(None), m_name(appName), m_locked(false) {

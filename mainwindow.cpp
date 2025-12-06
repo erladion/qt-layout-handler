@@ -11,30 +11,23 @@
 #include "zoneitem.h"
 
 #include <QAction>
-#include <QComboBox>
-#include <QDomDocument>
 #include <QFileDialog>
 #include <QGraphicsItemGroup>
-#include <QGraphicsPixmapItem>
 #include <QGraphicsView>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
-#include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
+#include <QMouseEvent>
 #include <QRandomGenerator>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
-#include <QTextStream>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
-#include <algorithm>
-#include <cmath>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), scene(nullptr) {
   resize(1400, 900);
@@ -146,23 +139,18 @@ void MainWindow::newLayout() {
   }
 }
 
-// NEW: Close Layout Implementation
 void MainWindow::closeLayout() {
   if (!scene)
     return;
 
-  // Reset View
   view->setScene(nullptr);
 
-  // Cleanup Scene
   scene->deleteLater();
   scene = nullptr;
 
-  // Reset Selection UI
   if (m_propDialog)
     m_propDialog->setItem(nullptr);
 
-  // Update UI State
   updateInterfaceState();
   statusBar()->showMessage("Layout closed.");
 }
@@ -451,6 +439,7 @@ void MainWindow::createMenuBar() {
 void MainWindow::createToolbar() {
   OfficeToolbar* ribbon = new OfficeToolbar(this);
 
+  // FIX: Styling for Menus only. Removed QSlider styles to keep it native.
   QString controlStyle = R"(
       QMenu {
           background-color: #ffffff;
@@ -487,7 +476,6 @@ void MainWindow::createToolbar() {
   connect(loadAct, &QAction::triggered, this, &MainWindow::loadLayout);
   fileSec->addLargeButton(new RibbonButton(loadAct, RibbonButton::Large));
 
-  // NEW: Close Action
   QAction* closeAct = new QAction(QIcon(":/icons/close.svg"), "Close", this);
   closeAct->setShortcut(QKeySequence::Close);
   connect(closeAct, &QAction::triggered, this, &MainWindow::closeLayout);
@@ -503,7 +491,10 @@ void MainWindow::createToolbar() {
   addMenu->addAction("Terminal");
   addMenu->addAction("Music Player");
   addMenu->addAction("File Manager");
+
+  // Explicitly set style on the menu instance
   addMenu->setStyleSheet(controlStyle);
+
   addBtn->setMenu(addMenu);
   connect(addMenu, &QMenu::triggered, this, &MainWindow::addApp);
   m_secInsert->addLargeButton((RibbonButton*)addBtn);
@@ -526,7 +517,10 @@ void MainWindow::createToolbar() {
   QMenu* tempMenu = new QMenu(tempBtn);
   tempMenu->addAction("Coding");
   tempMenu->addAction("Streaming");
+
+  // Explicitly set style on the menu instance
   tempMenu->setStyleSheet(controlStyle);
+
   tempBtn->setMenu(tempMenu);
   connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
   m_secInsert->addWidget(tempBtn, 1, 3);
@@ -608,6 +602,8 @@ void MainWindow::createToolbar() {
   gridSlider->setFixedWidth(80);
   gridSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
   gridSlider->setEnabled(false);
+
+  // FIX: Removed gridSlider->setStyleSheet to restore native look
   connect(gridSlider, &QSlider::valueChanged, this, &MainWindow::onGridSizeChanged);
   m_secView->addWidget(gridSlider, 1, 0);
 
