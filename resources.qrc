@@ -28,5 +28,6 @@
         <file>icons/section-arrange.svg</file>
         <file>icons/section-file.svg</file>
         <file>icons/section-insert.svg</file>
+        <file>icons/close.svg</file>
     </qresource>
 </RCC>

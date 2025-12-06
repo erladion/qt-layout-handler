@@ -15,8 +15,10 @@ public:
   void setLocked(bool locked);
   bool isLocked() const;
 
-  // Make public so MainWindow can call it after resizing via SpinBox
   void updateStatusText();
+
+  // NEW: Scale fonts based on layout size
+  void setFontScale(qreal scale);
 
 protected:
   QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
@@ -34,6 +36,8 @@ private:
   int m_resizeHandle;
   QString m_name;
 
+  // NEW: Track title text to update font
+  QGraphicsTextItem* m_titleText;
   QGraphicsTextItem* m_statusText;
   bool m_locked;
 };

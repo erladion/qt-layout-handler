@@ -12,6 +12,7 @@
 class LayoutScene;
 class RulerBar;
 class PropertiesDialog;
+class RibbonSection;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -32,6 +33,8 @@ private slots:
   void onBotBarChanged(int val);
 
   // Actions
+  void newLayout();
+  void closeLayout();  // NEW
   void addApp(QAction* action);
   void addZone();
   void removeWindow();
@@ -49,12 +52,13 @@ private slots:
   // Properties Slots
   void toggleProperties();
   void onSelectionChanged();
-  void onSceneChanged(const QList<QRectF>& region);  // Restored Signal Slot
+  void onSceneChanged(const QList<QRectF>& region);
 
 private:
   void createToolbar();
   void createMenuBar();
   void updateRulers();
+  void updateInterfaceState();
 
   QString getTemplateXml(const QString& name);
 
@@ -70,6 +74,12 @@ private:
   // Properties Window
   PropertiesDialog* m_propDialog;
   QAction* m_viewPropAct;
+
+  // Ribbon Sections
+  RibbonSection* m_secInsert;
+  RibbonSection* m_secArrange;
+  RibbonSection* m_secAlign;
+  RibbonSection* m_secView;
 };
 
 #endif  // MAINWINDOW_H

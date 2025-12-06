@@ -23,21 +23,44 @@ ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
   setBrush(QBrush(QColor(60, 60, 60, 200)));
   setPen(QPen(Qt::black, 1));
 
-  QGraphicsTextItem* text = new QGraphicsTextItem(appName, this);
-  text->setDefaultTextColor(Qt::lightGray);
-  text->setPos(5, 5);
+  // Title Text
+  m_titleText = new QGraphicsTextItem(appName, this);
+  m_titleText->setDefaultTextColor(Qt::lightGray);
+  m_titleText->setPos(5, 5);
 
+  // Set default "bigger" font for 1080p baseline
+  QFont titleFont = m_titleText->font();
+  titleFont.setPointSize(20);
+  titleFont.setBold(true);
+  m_titleText->setFont(titleFont);
+
+  // Status Text
   m_statusText = new QGraphicsTextItem("", this);
   m_statusText->setDefaultTextColor(QColor(200, 200, 200));
-  QFont font = m_statusText->font();
-  font.setPointSize(8);
-  m_statusText->setFont(font);
+  QFont statusFont = m_statusText->font();
+  statusFont.setPointSize(10);
+  m_statusText->setFont(statusFont);
 
   updateStatusText();
 }
 
 QString ResizableAppItem::name() const {
   return m_name;
+}
+
+void ResizableAppItem::setFontScale(qreal scale) {
+  if (scale <= 0)
+    return;
+
+  // Base sizes: Title 20pt, Status 10pt
+  // We scale these relative to the layout resolution
+  QFont titleFont = m_titleText->font();
+  titleFont.setPointSizeF(20.0 * scale);
+  m_titleText->setFont(titleFont);
+
+  QFont statusFont = m_statusText->font();
+  statusFont.setPointSizeF(10.0 * scale);
+  m_statusText->setFont(statusFont);
 }
 
 void ResizableAppItem::setLocked(bool locked) {
@@ -55,7 +78,11 @@ void ResizableAppItem::updateStatusText() {
   if (m_locked)
     status += " [LOCKED]";
   m_statusText->setPlainText(status);
-  m_statusText->setPos(5, rect().height() - 20);
+
+  // Adjust position based on font size (approx)
+  // We want it at bottom left, so we subtract height
+  qreal h = m_statusText->boundingRect().height();
+  m_statusText->setPos(5, rect().height() - h);
 }
 
 void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
@@ -208,14 +235,13 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     bool snappedW = false;
     bool snappedH = false;
 
-    // OPTIMIZATION: Query the Spatial Index instead of iterating the entire scene
-    // We look for candidates near the proposed bottom-right corner.
+    // Use SnappingUtils helper
     QRectF queryRect(currentX, currentY, proposedRight - currentX, proposedBottom - currentY);
     QList<QGraphicsItem*> candidates = SnappingUtils::getSnappingCandidates(layoutScene, queryRect, this);
 
     if (m_resizeHandle & Right) {
       for (QGraphicsItem* item : candidates) {
-        QRectF other = item->mapRectToScene(item->boundingRect());  // Use local logic for rect if needed
+        QRectF other = item->mapRectToScene(item->boundingRect());
 
         if (SnappingUtils::rangesOverlap(currentY, rect().height(), other.top(), other.height())) {
           if (SnappingUtils::isClose(proposedRight, other.left())) {
@@ -280,7 +306,7 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (newH < 50)
       newH = 50;
 
-    setRect(0, 0, newW, newH);
+    setRect(0, 0, newW, newH);  // Assuming rect starts at 0,0
     updateStatusText();
 
   } else {
