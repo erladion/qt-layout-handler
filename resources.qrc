@@ -1,23 +1,23 @@
 <RCC>
-    <qresource prefix="/icons">
-        <file>grid.svg</file>
-        <file>add.svg</file>
-        <file>remove.svg</file>
-        <file>save.svg</file>
-        <file>load.svg</file>
-        <file>align-bottom.svg</file>
-        <file>align-center-v.svg</file>
-        <file>align-left.svg</file>
-        <file>align-center-h.svg</file>
-        <file>align-right.svg</file>
-        <file>align-top.svg</file>
-        <file>distribute-h.svg</file>
-        <file>distribute-v.svg</file>
-        <file>zone.svg</file>
-        <file>image.svg</file>
-        <file>ungroup.svg</file>
-        <file>template.svg</file>
-        <file>lock.svg</file>
-        <file>group.svg</file>
+    <qresource prefix="/">
+        <file>icons/add.svg</file>
+        <file>icons/align-bottom.svg</file>
+        <file>icons/align-center-h.svg</file>
+        <file>icons/align-center-v.svg</file>
+        <file>icons/align-left.svg</file>
+        <file>icons/align-right.svg</file>
+        <file>icons/align-top.svg</file>
+        <file>icons/distribute-h.svg</file>
+        <file>icons/distribute-v.svg</file>
+        <file>icons/grid.svg</file>
+        <file>icons/group.svg</file>
+        <file>icons/image.svg</file>
+        <file>icons/load.svg</file>
+        <file>icons/lock.svg</file>
+        <file>icons/remove.svg</file>
+        <file>icons/save.svg</file>
+        <file>icons/template.svg</file>
+        <file>icons/ungroup.svg</file>
+        <file>icons/zone.svg</file>
     </qresource>
 </RCC>
