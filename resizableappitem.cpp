@@ -1,8 +1,4 @@
 #include "resizableappitem.h"
-#include "layoutscene.h"
-#include "snappingutils.h"
-#include "zoneitem.h"
-
 #include <QAction>
 #include <QBrush>
 #include <QCursor>
@@ -13,9 +9,14 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPen>
+#include <cmath>
+#include "layoutscene.h"
+#include "settingsdialog.h"  // NEW: Read settings
+#include "snappingutils.h"
+#include "zoneitem.h"
 
 ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
-    : QGraphicsRectItem(rect), m_resizeHandle(None), m_name(appName), m_locked(false) {
+    : QGraphicsRectItem(rect), m_resizeHandle(None), m_name(appName), m_locked(false), m_currentScale(1.0) {
   setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemSendsGeometryChanges);
   setAcceptHoverEvents(true);
   setCacheMode(QGraphicsItem::DeviceCoordinateCache);
@@ -23,23 +24,20 @@ ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
   setBrush(QBrush(QColor(60, 60, 60, 200)));
   setPen(QPen(Qt::black, 1));
 
+  // Initialize Base Font Size from Settings
+  m_baseFontSize = SettingsDialog::getAppFontSize();
+
   // Title Text
   m_titleText = new QGraphicsTextItem(appName, this);
   m_titleText->setDefaultTextColor(Qt::lightGray);
   m_titleText->setPos(5, 5);
 
-  // Set default "bigger" font for 1080p baseline
-  QFont titleFont = m_titleText->font();
-  titleFont.setPointSize(20);
-  titleFont.setBold(true);
-  m_titleText->setFont(titleFont);
-
   // Status Text
   m_statusText = new QGraphicsTextItem("", this);
   m_statusText->setDefaultTextColor(QColor(200, 200, 200));
-  QFont statusFont = m_statusText->font();
-  statusFont.setPointSize(12);  // Increased base size
-  m_statusText->setFont(statusFont);
+
+  // Apply Initial Fonts
+  setFontScale(1.0);
 
   updateStatusText();
 }
@@ -48,21 +46,29 @@ QString ResizableAppItem::name() const {
   return m_name;
 }
 
+// NEW: Helper to update base size and re-apply scale
+void ResizableAppItem::setBaseFontSize(int size) {
+  m_baseFontSize = size;
+  setFontScale(m_currentScale);  // Re-apply with new base
+}
+
 void ResizableAppItem::setFontScale(qreal scale) {
   if (scale <= 0)
     return;
+  m_currentScale = scale;
 
-  // Scale Title (Base 20pt)
+  // Scale Title (Base from settings)
   QFont titleFont = m_titleText->font();
-  titleFont.setPointSizeF(20.0 * scale);
+  titleFont.setPointSizeF(static_cast<double>(m_baseFontSize) * scale);
+  titleFont.setBold(true);
   m_titleText->setFont(titleFont);
 
-  // Scale Status/Location Text (Base 12pt)
+  // Scale Status/Location Text (Base ~60% of title)
   QFont statusFont = m_statusText->font();
-  statusFont.setPointSizeF(12.0 * scale);
+  statusFont.setPointSizeF((static_cast<double>(m_baseFontSize) * 0.6) * scale);
   m_statusText->setFont(statusFont);
 
-  // Force re-calculation of text position (so it stays at bottom)
+  // Force re-calculation of text position
   updateStatusText();
 }
 
@@ -87,6 +93,7 @@ void ResizableAppItem::updateStatusText() {
   m_statusText->setPos(5, rect().height() - h);
 }
 
+// ... Context Menu ...
 void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
   QMenu menu;
   QAction* lockAction = menu.addAction(m_locked ? "Unlock" : "Lock");
@@ -112,6 +119,7 @@ void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
   }
 }
 
+// ... Paint ...
 void ResizableAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
   QGraphicsRectItem::paint(painter, option, widget);
   if (m_locked) {
@@ -126,6 +134,7 @@ void ResizableAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
   }
 }
 
+// ... Item Change ...
 QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant& value) {
   if (change == ItemSelectedHasChanged) {
     if (value.toBool()) {

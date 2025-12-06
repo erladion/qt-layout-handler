@@ -17,8 +17,11 @@ public:
 
   void updateStatusText();
 
-  // NEW: Scale fonts based on layout size
+  // Scale fonts based on layout size
   void setFontScale(qreal scale);
+
+  // NEW: Update the base font size (e.g. from settings)
+  void setBaseFontSize(int size);
 
 protected:
   QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
@@ -36,10 +39,13 @@ private:
   int m_resizeHandle;
   QString m_name;
 
-  // NEW: Track title text to update font
   QGraphicsTextItem* m_titleText;
   QGraphicsTextItem* m_statusText;
   bool m_locked;
+
+  // NEW: Font management vars
+  int m_baseFontSize;
+  qreal m_currentScale;
 };
 
 #endif  // RESIZABLEAPPITEM_H

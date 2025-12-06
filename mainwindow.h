@@ -1,7 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include <QCloseEvent>  // NEW: For closeEvent override
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QEvent>
 #include <QGraphicsView>
@@ -25,8 +25,6 @@ public:
 protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
-
-  // NEW: Handle application close request
   void closeEvent(QCloseEvent* event) override;
 
 private slots:
@@ -43,11 +41,14 @@ private slots:
   void addZone();
   void removeWindow();
 
-  bool saveLayout();  // UPDATED: Returns success status
+  bool saveLayout();
   void loadLayout();
 
   void setWallpaper();
   void applyTemplate(QAction* action);
+
+  // Settings
+  void openSettings();  // NEW
 
   // Feature 6 & 7 Slots
   void toggleLock();
@@ -64,10 +65,7 @@ private:
   void createMenuBar();
   void updateRulers();
   void updateInterfaceState();
-
-  // NEW: Helper to check modification state and prompt user
   bool maybeSave();
-  // NEW: Updates title with asterisk (*) and internal flag
   void setModified(bool modified);
 
   QString getTemplateXml(const QString& name);
@@ -91,7 +89,6 @@ private:
   RibbonSection* m_secAlign;
   RibbonSection* m_secView;
 
-  // NEW: Track unsaved changes
   bool m_isModified;
 };
 

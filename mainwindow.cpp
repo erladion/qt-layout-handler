@@ -7,6 +7,7 @@
 #include "propertiesdialog.h"
 #include "resizableappitem.h"
 #include "rulerbar.h"
+#include "settingsdialog.h"
 #include "snappingitemgroup.h"
 #include "zoneitem.h"
 
@@ -104,7 +105,7 @@ MainWindow::~MainWindow() {
   }
 }
 
-// NEW: Prompt to save on exit
+// RESTORED: Close Event to handle unsaved changes
 void MainWindow::closeEvent(QCloseEvent* event) {
   if (maybeSave()) {
     event->accept();
@@ -113,7 +114,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
   }
 }
 
-// NEW: Helper to handle unsaved changes logic
+// RESTORED: Helper to handle unsaved changes logic
 bool MainWindow::maybeSave() {
   if (!m_isModified)
     return true;
@@ -134,7 +135,7 @@ bool MainWindow::maybeSave() {
   return true;
 }
 
-// NEW: Update window title and state
+// RESTORED: Update window title and state
 void MainWindow::setModified(bool modified) {
   m_isModified = modified;
   QString title = "Layout Manager";
@@ -182,16 +183,16 @@ void MainWindow::newLayout() {
 
     scene = new LayoutScene(0, 0, w, h, this);
     scene->setItemIndexMethod(QGraphicsScene::NoIndex);
-    scene->setTopBarHeight(30);
-    scene->setBottomBarHeight(40);
+
+    // Use settings defaults
+    scene->setTopBarHeight(SettingsDialog::getTopBarHeight());
+    scene->setBottomBarHeight(SettingsDialog::getBottomBarHeight());
 
     connect(scene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
     connect(scene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
 
     view->setScene(scene);
     updateInterfaceState();
-
-    // Reset modified state for new layout
     setModified(false);
 
     view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
@@ -203,7 +204,6 @@ void MainWindow::closeLayout() {
   // Check for unsaved changes
   if (!maybeSave())
     return;
-
   if (!scene)
     return;
 
@@ -218,6 +218,22 @@ void MainWindow::closeLayout() {
   updateInterfaceState();
   setModified(false);  // Reset state
   statusBar()->showMessage("Layout closed.");
+}
+
+void MainWindow::openSettings() {
+  SettingsDialog dlg(this);
+  if (dlg.exec() == QDialog::Accepted) {
+    // Refresh all items in scene if font size changed
+    if (scene) {
+      int newSize = SettingsDialog::getAppFontSize();
+      for (auto item : scene->items()) {
+        if (auto app = dynamic_cast<ResizableAppItem*>(item)) {
+          app->setBaseFontSize(newSize);
+        }
+      }
+    }
+    statusBar()->showMessage("Settings applied.");
+  }
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
@@ -316,10 +332,8 @@ void MainWindow::onSelectionChanged() {
 void MainWindow::onSceneChanged(const QList<QRectF>& region) {
   Q_UNUSED(region);
   if (scene) {
-    // Mark as modified if we detect scene changes
     if (!m_isModified)
       setModified(true);
-
     if (m_propDialog && m_propDialog->isVisible() && !scene->selectedItems().isEmpty()) {
       m_propDialog->refreshValues();
     }
@@ -462,18 +476,18 @@ QString MainWindow::getTemplateXml(const QString& name) {
 void MainWindow::applyTemplate(QAction* action) {
   if (!scene)
     return;
-  // Check if we should discard current changes before applying template
   if (!maybeSave())
     return;
 
   QString presetName = action->text();
   QString xmlContent = getTemplateXml(presetName);
   if (!xmlContent.isEmpty() && LayoutSerializer::loadFromXml(scene, xmlContent)) {
-    setModified(false);  // Template is a fresh start
+    setModified(false);
     statusBar()->showMessage("Applied template: " + presetName, 3000);
   }
 }
 
+// RESTORED: bool return type
 bool MainWindow::saveLayout() {
   if (!scene)
     return false;
@@ -523,6 +537,9 @@ void MainWindow::createMenuBar() {
   m_viewPropAct->setCheckable(true);
   m_viewPropAct->setShortcut(QKeySequence("F2"));
   connect(m_viewPropAct, &QAction::triggered, this, &MainWindow::toggleProperties);
+
+  QAction* settAct = viewMenu->addAction("Settings...");
+  connect(settAct, &QAction::triggered, this, &MainWindow::openSettings);
 }
 
 void MainWindow::createToolbar() {
