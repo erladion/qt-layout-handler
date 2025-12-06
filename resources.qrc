@@ -21,5 +21,7 @@
         <file>icons/zone.svg</file>
         <file>resources/spin-down.svg</file>
         <file>resources/spin-up.svg</file>
+        <file>resources/spin-up-dark.svg</file>
+        <file>resources/spin-down-dark.svg</file>
     </qresource>
 </RCC>

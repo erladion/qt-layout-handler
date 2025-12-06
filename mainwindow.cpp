@@ -427,6 +427,7 @@ void MainWindow::createToolbar() {
   QToolBar* toolbar = addToolBar("Tools");
   toolbar->setIconSize(QSize(24, 24));
 
+  // ... existing toolbar actions (Save, Load, Wallpaper, Templates, Add, Remove, Lock, Group, Ungroup, Alignments, Grid) ...
   QAction* saveAct = toolbar->addAction(QIcon(":/icons/save.svg"), "Save");
   saveAct->setShortcut(QKeySequence::Save);
   connect(saveAct, &QAction::triggered, this, &MainWindow::saveLayout);
@@ -512,11 +513,28 @@ void MainWindow::createToolbar() {
   gridLabel = new QLabel("50px");
   toolbar->addWidget(gridLabel);
 
+  // Common Stylesheet for Light Mode Spinboxes in Toolbar
+  QString spinStyle =
+      "QSpinBox { background-color: #ffffff; color: #333333; border: 1px solid #cccccc; padding: 2px; selection-background-color: #3399ff; }"
+      "QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; width: 16px; border-left: 1px solid #cccccc; border-bottom: "
+      "1px solid #cccccc; background: #f5f5f5; }"
+      "QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; width: 16px; border-left: 1px solid #cccccc; "
+      "border-top: 0px solid #cccccc; background: #f5f5f5; }"
+      "QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: #e0e0e0; }"
+      "QSpinBox::up-button:pressed, QSpinBox::down-button:pressed { background: #d0d0d0; }"
+      "QSpinBox::up-arrow { width: 10px; height: 10px; image: url(:/resources/spin-up-dark.svg); }"
+      "QSpinBox::down-arrow { width: 10px; height: 10px; image: url(:/resources/spin-down-dark.svg); }"
+      "QSpinBox:disabled { color: #aaaaaa; background-color: #f0f0f0; }";
+
   toolbar->addWidget(new QLabel(" T:"));
   QSpinBox* topSpin = new QSpinBox();
   topSpin->setRange(0, 200);
   topSpin->setValue(30);
   topSpin->setSuffix("px");
+  // Apply Style
+  topSpin->setStyleSheet(spinStyle);
+  // Disable keyboard tracking for safer typing
+  topSpin->setKeyboardTracking(false);
   connect(topSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::onTopBarChanged);
   toolbar->addWidget(topSpin);
 
@@ -525,6 +543,10 @@ void MainWindow::createToolbar() {
   botSpin->setRange(0, 200);
   botSpin->setValue(40);
   botSpin->setSuffix("px");
+  // Apply Style
+  botSpin->setStyleSheet(spinStyle);
+  // Disable keyboard tracking
+  botSpin->setKeyboardTracking(false);
   connect(botSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::onBotBarChanged);
   toolbar->addWidget(botSpin);
 }
