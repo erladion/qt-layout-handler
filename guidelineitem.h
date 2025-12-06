@@ -11,14 +11,15 @@ public:
   GuideLineItem(Orientation orientation, qreal pos, qreal length = 10000);
 
   int type() const override { return Type; }
-  enum { Type = UserType + 10 };  // Custom Type ID for snapping checks
+  enum { Type = UserType + 10 };
 
   Orientation orientation() const { return m_orientation; }
 
+  // FIX: Override boundingRect to include the custom painted arrows
+  QRectF boundingRect() const override;
+
 protected:
   void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
-
-  // update line length on change if needed, though usually fixed long length is fine
   QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
 private:
