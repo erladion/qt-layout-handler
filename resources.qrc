@@ -23,5 +23,10 @@
         <file>resources/spin-up.svg</file>
         <file>resources/spin-up-dark.svg</file>
         <file>resources/spin-down-dark.svg</file>
+        <file>icons/section-alignment.svg</file>
+        <file>icons/section-view.svg</file>
+        <file>icons/section-arrange.svg</file>
+        <file>icons/section-file.svg</file>
+        <file>icons/section-insert.svg</file>
     </qresource>
 </RCC>

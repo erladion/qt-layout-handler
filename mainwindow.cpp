@@ -2,6 +2,7 @@
 #include "guidelineitem.h"
 #include "layoutscene.h"
 #include "layoutserializer.h"
+#include "officetoolbar.h"
 #include "propertiesdialog.h"
 #include "resizableappitem.h"
 #include "rulerbar.h"
@@ -16,6 +17,7 @@
 #include <QGraphicsPixmapItem>
 #include <QGraphicsView>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QIcon>
 #include <QKeyEvent>
 #include <QLabel>
@@ -34,7 +36,7 @@
 #include <cmath>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-  resize(1200, 800);
+  resize(1400, 900);
   setWindowTitle("Layout Manager");
 
   scene = new LayoutScene(0, 0, 1920, 1080, this);
@@ -42,9 +44,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   scene->setTopBarHeight(30);
   scene->setBottomBarHeight(40);
 
-  // Connect Selection Logic for Properties Window
   connect(scene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
-  // Restore Scene Changed connection for live updates
   connect(scene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
 
   view = new QGraphicsView(scene, this);
@@ -54,10 +54,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
   view->setDragMode(QGraphicsView::RubberBandDrag);
   view->setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
-
   view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-
   view->setResizeAnchor(QGraphicsView::AnchorViewCenter);
   view->setOptimizationFlags(QGraphicsView::DontSavePainterState | QGraphicsView::DontAdjustForAntialiasing);
 
@@ -86,19 +84,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   m_hRuler->installEventFilter(this);
   m_vRuler->installEventFilter(this);
 
-  // Initialize Properties Dialog (Hidden by default)
-  // FIX: Reverted parent to 'view' so it stays contained within the application
-  // and behaves like an internal tool window.
   m_propDialog = new PropertiesDialog(view);
   m_propDialog->hide();
-  m_propDialog->move(20, 20);  // Initial position inside the view
+  m_propDialog->move(20, 20);
 
   createToolbar();
   createMenuBar();
 
   statusBar()->showMessage("Rulers active. Drag from rulers to create Guides.");
 
-  // FIX: Startup Scale Fix
   QTimer::singleShot(100, this, [this]() {
     if (view && scene) {
       view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
@@ -108,12 +102,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
 }
 
-MainWindow::~MainWindow() {
-  // m_propDialog is automatically deleted because it is a child of 'view'
-}
+MainWindow::~MainWindow() {}
 
-// ... event filters and existing logic ...
-
+// ... event filters ...
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (event->type() == QEvent::MouseMove) {
     QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -163,39 +154,33 @@ void MainWindow::onBotBarChanged(int val) {
   updateRulers();
 }
 
-// --- Properties Logic ---
-
+// ... selection logic ...
 void MainWindow::toggleProperties() {
   if (m_propDialog->isVisible()) {
     m_propDialog->hide();
-    m_viewPropAct->setChecked(false);
+    if (m_viewPropAct)
+      m_viewPropAct->setChecked(false);
   } else {
     m_propDialog->show();
-    m_propDialog->raise();  // Ensure it's on top of the canvas
+    m_propDialog->raise();
     m_propDialog->activateWindow();
-    m_viewPropAct->setChecked(true);
-
-    // Force update immediately
-    if (!scene->selectedItems().isEmpty()) {
+    if (m_viewPropAct)
+      m_viewPropAct->setChecked(true);
+    if (!scene->selectedItems().isEmpty())
       m_propDialog->setItem(scene->selectedItems().first());
-    } else {
+    else
       m_propDialog->setItem(nullptr);
-    }
   }
 }
 
 void MainWindow::onSelectionChanged() {
   if (!m_propDialog->isVisible())
     return;
-
   QList<QGraphicsItem*> sel = scene->selectedItems();
-
   if (sel.isEmpty()) {
-    // Debounce selection clearing
     QTimer::singleShot(50, this, [this]() {
-      if (scene->selectedItems().isEmpty()) {
+      if (scene->selectedItems().isEmpty())
         m_propDialog->setItem(nullptr);
-      }
     });
   } else {
     m_propDialog->setItem(sel.first());
@@ -205,14 +190,12 @@ void MainWindow::onSelectionChanged() {
 
 void MainWindow::onSceneChanged(const QList<QRectF>& region) {
   Q_UNUSED(region);
-  // Refresh properties if dialog is visible and something is selected
   if (m_propDialog && m_propDialog->isVisible() && !scene->selectedItems().isEmpty()) {
     m_propDialog->refreshValues();
   }
 }
 
-// -------------------------
-
+// ... add/remove logic ...
 void MainWindow::addApp(QAction* action) {
   QString type = action->text();
   double w = 400, h = 300;
@@ -226,23 +209,12 @@ void MainWindow::addApp(QAction* action) {
 
   ResizableAppItem* item = scene->addAppItem(type, QRectF(0, 0, w, h));
   QRectF safe = scene->getWorkingArea();
-
-  int maxX = static_cast<int>(safe.width()) - 200;
-  int maxY = static_cast<int>(safe.height()) - 200;
-
-  int startX = safe.left();
-  if (maxX > 0)
-    startX += QRandomGenerator::global()->bounded(maxX);
-
-  int startY = safe.top();
-  if (maxY > 0)
-    startY += QRandomGenerator::global()->bounded(maxY);
-
+  int startX = safe.left() + 20;
+  int startY = safe.top() + 20;
   if (scene->isGridEnabled()) {
     startX = std::round(startX / (double)scene->gridSize()) * scene->gridSize();
     startY = std::round(startY / (double)scene->gridSize()) * scene->gridSize();
   }
-
   item->setPos(startX, startY);
 }
 
@@ -266,12 +238,11 @@ void MainWindow::removeWindow() {
 }
 
 void MainWindow::groupItems() {
+  // ... (Same Group Logic) ...
   QList<QGraphicsItem*> selected = scene->selectedItems();
-
   SnappingItemGroup* existingGroup = nullptr;
   QList<QGraphicsItem*> itemsToGroup;
   int groupCount = 0;
-
   for (QGraphicsItem* item : selected) {
     if (SnappingItemGroup* grp = dynamic_cast<SnappingItemGroup*>(item)) {
       existingGroup = grp;
@@ -280,7 +251,6 @@ void MainWindow::groupItems() {
       itemsToGroup.append(item);
     }
   }
-
   if (groupCount == 1 && !itemsToGroup.isEmpty()) {
     for (QGraphicsItem* item : itemsToGroup) {
       item->setSelected(false);
@@ -290,18 +260,13 @@ void MainWindow::groupItems() {
     statusBar()->showMessage("Added item(s) to existing group.", 2000);
     return;
   }
-
-  if (itemsToGroup.size() < 2) {
-    statusBar()->showMessage("Select at least 2 items to group.", 2000);
+  if (itemsToGroup.size() < 2)
     return;
-  }
-
   SnappingItemGroup* group = new SnappingItemGroup(scene);
   for (QGraphicsItem* item : itemsToGroup) {
     item->setSelected(false);
     group->addToGroup(item);
   }
-
   scene->addItem(group);
   group->setSelected(true);
   statusBar()->showMessage("Items grouped.", 2000);
@@ -311,7 +276,6 @@ void MainWindow::ungroupItems() {
   QList<QGraphicsItem*> selected = scene->selectedItems();
   if (selected.isEmpty())
     return;
-
   int count = 0;
   for (auto item : selected) {
     if (QGraphicsItemGroup* group = dynamic_cast<QGraphicsItemGroup*>(item)) {
@@ -319,60 +283,35 @@ void MainWindow::ungroupItems() {
       count++;
     }
   }
-
   if (count > 0)
-    statusBar()->showMessage("Ungrouped " + QString::number(count) + " items.", 2000);
+    statusBar()->showMessage("Ungrouped items.", 2000);
 }
 
 void MainWindow::toggleLock() {
   QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.isEmpty())
-    return;
-
-  bool anyLocked = false;
   for (auto item : selected) {
     if (ResizableAppItem* app = dynamic_cast<ResizableAppItem*>(item)) {
-      bool newState = !app->isLocked();
-      app->setLocked(newState);
-      if (newState)
-        anyLocked = true;
+      app->setLocked(!app->isLocked());
     }
   }
-  statusBar()->showMessage(anyLocked ? "Items locked." : "Items unlocked.", 2000);
 }
 
 void MainWindow::setWallpaper() {
   QString fileName = QFileDialog::getOpenFileName(this, "Select Wallpaper", "", "Images (*.png *.jpg *.jpeg *.bmp)");
   if (fileName.isEmpty())
     return;
-
   QPixmap pix(fileName);
-  if (pix.isNull()) {
-    statusBar()->showMessage("Failed to load image.", 3000);
+  if (pix.isNull())
     return;
-  }
-
   scene->setWallpaper(pix);
-  statusBar()->showMessage("Wallpaper loaded and scaled.", 3000);
+  statusBar()->showMessage("Wallpaper loaded.", 3000);
 }
 
 QString MainWindow::getTemplateXml(const QString& name) {
   if (name == "Coding") {
-    return R"(
-            <Layout>
-                <App name="IDE" x="0" y="30" width="1150" height="1010" />
-                <App name="Terminal" x="1150" y="30" width="770" height="505" />
-                <App name="Browser" x="1150" y="535" width="770" height="505" />
-            </Layout>
-        )";
+    return R"(<Layout><App name="IDE" x="0" y="30" width="1150" height="1010" /><App name="Terminal" x="1150" y="30" width="770" height="505" /><App name="Browser" x="1150" y="535" width="770" height="505" /></Layout>)";
   } else if (name == "Streaming") {
-    return R"(
-            <Layout>
-                <App name="OBS" x="0" y="30" width="480" height="1010" />
-                <App name="Game" x="480" y="30" width="960" height="1010" />
-                <App name="Chat" x="1440" y="30" width="480" height="1010" />
-            </Layout>
-        )";
+    return R"(<Layout><App name="OBS" x="0" y="30" width="480" height="1010" /><App name="Game" x="480" y="30" width="960" height="1010" /><App name="Chat" x="1440" y="30" width="480" height="1010" /></Layout>)";
   }
   return "";
 }
@@ -380,38 +319,21 @@ QString MainWindow::getTemplateXml(const QString& name) {
 void MainWindow::applyTemplate(QAction* action) {
   QString presetName = action->text();
   QString xmlContent = getTemplateXml(presetName);
-  if (xmlContent.isEmpty())
-    return;
-
-  if (LayoutSerializer::loadFromXml(scene, xmlContent)) {
+  if (!xmlContent.isEmpty() && LayoutSerializer::loadFromXml(scene, xmlContent)) {
     statusBar()->showMessage("Applied template: " + presetName, 3000);
-  } else {
-    statusBar()->showMessage("Error parsing template XML.", 3000);
   }
 }
 
 void MainWindow::saveLayout() {
   QString fileName = QFileDialog::getSaveFileName(this, "Save Layout", "", "XML Files (*.xml)");
-  if (fileName.isEmpty())
-    return;
-
-  if (LayoutSerializer::save(scene, fileName)) {
-    statusBar()->showMessage("Layout saved.", 3000);
-  } else {
-    statusBar()->showMessage("Failed to save layout.", 3000);
-  }
+  if (!fileName.isEmpty())
+    LayoutSerializer::save(scene, fileName);
 }
 
 void MainWindow::loadLayout() {
   QString fileName = QFileDialog::getOpenFileName(this, "Load Layout", "", "XML Files (*.xml)");
-  if (fileName.isEmpty())
-    return;
-
-  if (LayoutSerializer::load(scene, fileName)) {
-    statusBar()->showMessage("Layout loaded from file.", 3000);
-  } else {
-    statusBar()->showMessage("Failed to load layout.", 3000);
-  }
+  if (!fileName.isEmpty())
+    LayoutSerializer::load(scene, fileName);
 }
 
 void MainWindow::createMenuBar() {
@@ -424,96 +346,148 @@ void MainWindow::createMenuBar() {
 }
 
 void MainWindow::createToolbar() {
-  QToolBar* toolbar = addToolBar("Tools");
-  toolbar->setIconSize(QSize(24, 24));
+  OfficeToolbar* ribbon = new OfficeToolbar(this);
 
-  // ... existing toolbar actions (Save, Load, Wallpaper, Templates, Add, Remove, Lock, Group, Ungroup, Alignments, Grid) ...
-  QAction* saveAct = toolbar->addAction(QIcon(":/icons/save.svg"), "Save");
+  // FIX: Styling for Menus only. Removed palette overrides.
+  QString controlStyle = R"(
+      QMenu {
+          background-color: #ffffff;
+          border: 1px solid #cccccc;
+          color: #333333;
+          padding: 2px;
+      }
+      QMenu::item {
+          padding: 5px 25px 5px 25px;
+          background: transparent;
+          color: #333333;
+      }
+      QMenu::item:selected {
+          background-color: #3399ff;
+          color: #ffffff;
+      }
+  )";
+
+  // --- SECTION: FILE ---
+  RibbonSection* fileSec = ribbon->addSection("File", QIcon(":/icons/section-file.svg"));
+  QAction* saveAct = new QAction(QIcon(":/icons/save.svg"), "Save", this);
   saveAct->setShortcut(QKeySequence::Save);
   connect(saveAct, &QAction::triggered, this, &MainWindow::saveLayout);
+  fileSec->addLargeButton(new RibbonButton(saveAct, RibbonButton::Large));
 
-  QAction* loadAct = toolbar->addAction(QIcon(":/icons/load.svg"), "Load");
+  QAction* loadAct = new QAction(QIcon(":/icons/load.svg"), "Load", this);
   loadAct->setShortcut(QKeySequence::Open);
   connect(loadAct, &QAction::triggered, this, &MainWindow::loadLayout);
+  fileSec->addLargeButton(new RibbonButton(loadAct, RibbonButton::Large));
 
-  connect(toolbar->addAction(QIcon(":/icons/image.svg"), "Wallpaper"), &QAction::triggered, this, &MainWindow::setWallpaper);
+  // --- SECTION: INSERT ---
+  RibbonSection* insSec = ribbon->addSection("Insert", QIcon(":/icons/section-insert.svg"));
 
-  QToolButton* tempBtn = new QToolButton();
-  tempBtn->setText("Templates");
-  tempBtn->setIcon(QIcon(":/icons/template.svg"));
-  tempBtn->setPopupMode(QToolButton::InstantPopup);
-  QMenu* tempMenu = new QMenu(tempBtn);
-  tempMenu->addAction("Coding");
-  tempMenu->addAction("Streaming");
-  tempBtn->setMenu(tempMenu);
-  connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
-  toolbar->addWidget(tempBtn);
-
-  toolbar->addSeparator();
-
-  QToolButton* addBtn = new QToolButton();
-  addBtn->setText("Add App");
-  addBtn->setIcon(QIcon(":/icons/add.svg"));
+  QToolButton* addBtn = new RibbonButton(new QAction(QIcon(":/icons/add.svg"), "Add App", this), RibbonButton::Large);
   addBtn->setPopupMode(QToolButton::InstantPopup);
   QMenu* addMenu = new QMenu(addBtn);
   addMenu->addAction("Browser");
   addMenu->addAction("Terminal");
   addMenu->addAction("Music Player");
   addMenu->addAction("File Manager");
+
+  addMenu->setStyleSheet(controlStyle);
+
   addBtn->setMenu(addMenu);
   connect(addMenu, &QMenu::triggered, this, &MainWindow::addApp);
-  toolbar->addWidget(addBtn);
+  insSec->addLargeButton((RibbonButton*)addBtn);
 
-  connect(toolbar->addAction(QIcon(":/icons/zone.svg"), "Add Zone"), &QAction::triggered, this, &MainWindow::addZone);
+  QAction* zoneAct = new QAction(QIcon(":/icons/zone.svg"), "Zone", this);
+  connect(zoneAct, &QAction::triggered, this, &MainWindow::addZone);
+  insSec->addLargeButton(new RibbonButton(zoneAct, RibbonButton::Large));
 
-  QAction* removeAct = toolbar->addAction(QIcon(":/icons/remove.svg"), "Remove");
-  removeAct->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
-  connect(removeAct, &QAction::triggered, this, &MainWindow::removeWindow);
+  QAction* rmAct = new QAction(QIcon(":/icons/remove.svg"), "Delete", this);
+  rmAct->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
+  connect(rmAct, &QAction::triggered, this, &MainWindow::removeWindow);
+  insSec->addLargeButton(new RibbonButton(rmAct, RibbonButton::Large));
 
-  toolbar->addSeparator();
-  QAction* lockAct = toolbar->addAction(QIcon(":/icons/lock.svg"), "Lock");
-  lockAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
-  connect(lockAct, &QAction::triggered, this, &MainWindow::toggleLock);
+  QAction* wallAct = new QAction(QIcon(":/icons/image.svg"), "Wallpaper", this);
+  connect(wallAct, &QAction::triggered, this, &MainWindow::setWallpaper);
+  insSec->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 3);
 
-  QAction* grpAct = toolbar->addAction(QIcon(":/icons/group.svg"), "Group");
+  QToolButton* tempBtn = new RibbonButton(new QAction(QIcon(":/icons/template.svg"), "Templates", this), RibbonButton::Small);
+  tempBtn->setPopupMode(QToolButton::InstantPopup);
+  QMenu* tempMenu = new QMenu(tempBtn);
+  tempMenu->addAction("Coding");
+  tempMenu->addAction("Streaming");
+
+  tempMenu->setStyleSheet(controlStyle);
+
+  tempBtn->setMenu(tempMenu);
+  connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
+  insSec->addWidget(tempBtn, 1, 3);
+
+  // --- SECTION: ARRANGE ---
+  RibbonSection* arrSec = ribbon->addSection("Arrange", QIcon(":/icons/section-arrange.svg"));
+
+  QAction* grpAct = new QAction(QIcon(":/icons/group.svg"), "Group", this);
   grpAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
   connect(grpAct, &QAction::triggered, this, &MainWindow::groupItems);
+  arrSec->addWidget(new RibbonButton(grpAct, RibbonButton::Small), 0, 0);
 
-  QAction* ungrpAct = toolbar->addAction(QIcon(":/icons/ungroup.svg"), "Ungroup");
+  QAction* ungrpAct = new QAction(QIcon(":/icons/ungroup.svg"), "Ungroup", this);
   ungrpAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
   connect(ungrpAct, &QAction::triggered, this, &MainWindow::ungroupItems);
+  arrSec->addWidget(new RibbonButton(ungrpAct, RibbonButton::Small), 1, 0);
 
-  toolbar->addSeparator();
+  QAction* lockAct = new QAction(QIcon(":/icons/lock.svg"), "Lock", this);
+  lockAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+  connect(lockAct, &QAction::triggered, this, &MainWindow::toggleLock);
+  arrSec->addWidget(new RibbonButton(lockAct, RibbonButton::Small), 2, 0);
 
-  connect(toolbar->addAction(QIcon(":/icons/align-left.svg"), "L"), &QAction::triggered, scene, &LayoutScene::alignSelectionLeft);
-  connect(toolbar->addAction(QIcon(":/icons/align-center-h.svg"), "CH"), &QAction::triggered, scene, &LayoutScene::alignSelectionCenterH);
-  connect(toolbar->addAction(QIcon(":/icons/align-right.svg"), "R"), &QAction::triggered, scene, &LayoutScene::alignSelectionRight);
+  // --- SECTION: ALIGNMENT ---
+  RibbonSection* alignSec = ribbon->addSection("Alignment", QIcon(":/icons/section-alignment.svg"));
 
-  connect(toolbar->addAction(QIcon(":/icons/align-top.svg"), "T"), &QAction::triggered, scene, &LayoutScene::alignSelectionTop);
-  connect(toolbar->addAction(QIcon(":/icons/align-center-v.svg"), "CV"), &QAction::triggered, scene, &LayoutScene::alignSelectionCenterV);
-  connect(toolbar->addAction(QIcon(":/icons/align-bottom.svg"), "B"), &QAction::triggered, scene, &LayoutScene::alignSelectionBottom);
+  QAction* al = new QAction(QIcon(":/icons/align-left.svg"), "Left", this);
+  connect(al, &QAction::triggered, scene, &LayoutScene::alignSelectionLeft);
+  alignSec->addWidget(new RibbonButton(al, RibbonButton::Small), 0, 0);
 
-  connect(toolbar->addAction(QIcon(":/icons/distribute-h.svg"), "DH"), &QAction::triggered, scene, &LayoutScene::distributeSelectionH);
-  connect(toolbar->addAction(QIcon(":/icons/distribute-v.svg"), "DV"), &QAction::triggered, scene, &LayoutScene::distributeSelectionV);
+  QAction* ac = new QAction(QIcon(":/icons/align-center-h.svg"), "Center", this);
+  connect(ac, &QAction::triggered, scene, &LayoutScene::alignSelectionCenterH);
+  alignSec->addWidget(new RibbonButton(ac, RibbonButton::Small), 1, 0);
 
-  toolbar->addSeparator();
+  QAction* ar = new QAction(QIcon(":/icons/align-right.svg"), "Right", this);
+  connect(ar, &QAction::triggered, scene, &LayoutScene::alignSelectionRight);
+  alignSec->addWidget(new RibbonButton(ar, RibbonButton::Small), 2, 0);
 
-  QAction* gridAct = toolbar->addAction(QIcon(":/icons/grid.svg"), "Grid");
+  QAction* at = new QAction(QIcon(":/icons/align-top.svg"), "Top", this);
+  connect(at, &QAction::triggered, scene, &LayoutScene::alignSelectionTop);
+  alignSec->addWidget(new RibbonButton(at, RibbonButton::Small), 0, 1);
+
+  QAction* am = new QAction(QIcon(":/icons/align-center-v.svg"), "Middle", this);
+  connect(am, &QAction::triggered, scene, &LayoutScene::alignSelectionCenterV);
+  alignSec->addWidget(new RibbonButton(am, RibbonButton::Small), 1, 1);
+
+  QAction* ab = new QAction(QIcon(":/icons/align-bottom.svg"), "Bottom", this);
+  connect(ab, &QAction::triggered, scene, &LayoutScene::alignSelectionBottom);
+  alignSec->addWidget(new RibbonButton(ab, RibbonButton::Small), 2, 1);
+
+  // --- SECTION: VIEW ---
+  RibbonSection* viewSec = ribbon->addSection("View", QIcon(":/icons/section-view.svg"));
+
+  QAction* gridAct = new QAction(QIcon(":/icons/grid.svg"), "Grid", this);
   gridAct->setCheckable(true);
   connect(gridAct, &QAction::toggled, this, &MainWindow::toggleGrid);
+  viewSec->addWidget(new RibbonButton(gridAct, RibbonButton::Small), 0, 0);
 
   gridSlider = new QSlider(Qt::Horizontal);
   gridSlider->setRange(10, 200);
   gridSlider->setValue(50);
   gridSlider->setFixedWidth(80);
+  gridSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
   gridSlider->setEnabled(false);
+
+  // FIX: Removed gridSlider->setPalette(lightPal); to allow default system colors
   connect(gridSlider, &QSlider::valueChanged, this, &MainWindow::onGridSizeChanged);
-  toolbar->addWidget(gridSlider);
+  viewSec->addWidget(gridSlider, 1, 0);
 
   gridLabel = new QLabel("50px");
-  toolbar->addWidget(gridLabel);
+  viewSec->addWidget(gridLabel, 2, 0);
 
-  // Common Stylesheet for Light Mode Spinboxes in Toolbar
   QString spinStyle =
       "QSpinBox { background-color: #ffffff; color: #333333; border: 1px solid #cccccc; padding: 2px; selection-background-color: #3399ff; }"
       "QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; width: 16px; border-left: 1px solid #cccccc; border-bottom: "
@@ -526,27 +500,48 @@ void MainWindow::createToolbar() {
       "QSpinBox::down-arrow { width: 10px; height: 10px; image: url(:/resources/spin-down-dark.svg); }"
       "QSpinBox:disabled { color: #aaaaaa; background-color: #f0f0f0; }";
 
-  toolbar->addWidget(new QLabel(" T:"));
   QSpinBox* topSpin = new QSpinBox();
   topSpin->setRange(0, 200);
   topSpin->setValue(30);
-  topSpin->setSuffix("px");
-  // Apply Style
+  topSpin->setSuffix(" px");
+  topSpin->setFixedWidth(60);
   topSpin->setStyleSheet(spinStyle);
-  // Disable keyboard tracking for safer typing
   topSpin->setKeyboardTracking(false);
   connect(topSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::onTopBarChanged);
-  toolbar->addWidget(topSpin);
 
-  toolbar->addWidget(new QLabel(" B:"));
   QSpinBox* botSpin = new QSpinBox();
   botSpin->setRange(0, 200);
   botSpin->setValue(40);
-  botSpin->setSuffix("px");
-  // Apply Style
+  botSpin->setSuffix(" px");
+  botSpin->setFixedWidth(60);
   botSpin->setStyleSheet(spinStyle);
-  // Disable keyboard tracking
   botSpin->setKeyboardTracking(false);
   connect(botSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::onBotBarChanged);
-  toolbar->addWidget(botSpin);
+
+  QWidget* topContainer = new QWidget();
+  // FIX: Force fixed size policy on container to prevent stretching and early collapse
+  topContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+  QHBoxLayout* topLayout = new QHBoxLayout(topContainer);
+  topLayout->setContentsMargins(0, 0, 0, 0);
+  topLayout->setSpacing(5);
+  topLayout->addWidget(new QLabel("Top Bar:"));
+  topLayout->addWidget(topSpin);
+
+  QWidget* botContainer = new QWidget();
+  // FIX: Force fixed size policy on container to prevent stretching and early collapse
+  botContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+  QHBoxLayout* botLayout = new QHBoxLayout(botContainer);
+  botLayout->setContentsMargins(0, 0, 0, 0);
+  botLayout->setSpacing(5);
+  botLayout->addWidget(new QLabel("Bot Bar:"));
+  botLayout->addWidget(botSpin);
+
+  viewSec->addWidget(topContainer, 0, 1);  // Col 1
+  viewSec->addWidget(botContainer, 1, 1);  // Col 1
+
+  ribbon->addSpacer();
+
+  QToolBar* tb = addToolBar("Ribbon");
+  tb->setMovable(false);
+  tb->addWidget(ribbon);
 }
