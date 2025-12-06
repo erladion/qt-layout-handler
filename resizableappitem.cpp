@@ -14,8 +14,6 @@
 #include "snappingutils.h"
 #include "zoneitem.h"
 
-// REMOVED local constant, now using SnappingUtils::isClose / SNAP_DIST
-
 ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
     : QGraphicsRectItem(rect), m_resizeHandle(None), m_name(appName), m_locked(false) {
   setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemSendsGeometryChanges);
@@ -117,7 +115,6 @@ QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant&
     return pos();
   }
 
-  // Disable internal snapping if grouped (parent handles it)
   if (parentItem() != nullptr) {
     return QGraphicsRectItem::itemChange(change, value);
   }
@@ -211,15 +208,14 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     bool snappedW = false;
     bool snappedH = false;
 
-    // Use SnappingUtils helper
+    // OPTIMIZATION: Query the Spatial Index instead of iterating the entire scene
+    // We look for candidates near the proposed bottom-right corner.
+    QRectF queryRect(currentX, currentY, proposedRight - currentX, proposedBottom - currentY);
+    QList<QGraphicsItem*> candidates = SnappingUtils::getSnappingCandidates(layoutScene, queryRect, this);
+
     if (m_resizeHandle & Right) {
-      for (QGraphicsItem* item : scene()->items()) {
-        if (item == this)
-          continue;
-        ResizableAppItem* otherItem = dynamic_cast<ResizableAppItem*>(item);
-        if (!otherItem)
-          continue;
-        QRectF other = otherItem->mapRectToScene(otherItem->rect());
+      for (QGraphicsItem* item : candidates) {
+        QRectF other = item->mapRectToScene(item->boundingRect());  // Use local logic for rect if needed
 
         if (SnappingUtils::rangesOverlap(currentY, rect().height(), other.top(), other.height())) {
           if (SnappingUtils::isClose(proposedRight, other.left())) {
@@ -241,13 +237,8 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     }
 
     if (m_resizeHandle & Bottom) {
-      for (QGraphicsItem* item : scene()->items()) {
-        if (item == this)
-          continue;
-        ResizableAppItem* otherItem = dynamic_cast<ResizableAppItem*>(item);
-        if (!otherItem)
-          continue;
-        QRectF other = otherItem->mapRectToScene(otherItem->rect());
+      for (QGraphicsItem* item : candidates) {
+        QRectF other = item->mapRectToScene(item->boundingRect());
 
         if (SnappingUtils::rangesOverlap(currentX, rect().width(), other.left(), other.width())) {
           if (SnappingUtils::isClose(proposedBottom, other.top())) {
@@ -289,7 +280,7 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (newH < 50)
       newH = 50;
 
-    setRect(0, 0, newW, newH);  // Assuming rect starts at 0,0
+    setRect(0, 0, newW, newH);
     updateStatusText();
 
   } else {
