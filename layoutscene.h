@@ -8,6 +8,8 @@
 #include <QPixmap>
 #include <QVector>
 
+class ResizableAppItem;  // Forward declaration
+
 class LayoutScene : public QGraphicsScene {
   Q_OBJECT
 public:
@@ -22,19 +24,21 @@ public:
   void setTopBarHeight(int h);
   void setBottomBarHeight(int h);
 
-  // Set wallpaper on the internal artboard
   void setWallpaper(const QPixmap& pix);
 
   int topBarHeight() const { return m_topBarHeight; }
   int bottomBarHeight() const { return m_bottomBarHeight; }
 
   QRectF getWorkingArea() const;
-
-  // Getter for cached lines so ArtboardItem can read them
   const QVector<QLineF>& gridLines() const { return m_cachedGridLines; }
 
+  // --- ITEM MANAGEMENT ---
+  void clearLayout();
+
+  // NEW: Factory method to centralize item creation
+  ResizableAppItem* addAppItem(const QString& name, const QRectF& rect);
+
 public slots:
-  // --- REFACTOR: Alignment Operations moved here ---
   void alignSelectionLeft();
   void alignSelectionRight();
   void alignSelectionTop();

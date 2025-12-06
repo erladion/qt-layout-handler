@@ -7,6 +7,17 @@
 #include "snappingitemgroup.h"
 #include "zoneitem.h"
 
+// --- Class Implementation ---
+
+bool SnappingUtils::isSnappableItem(QGraphicsItem* item) {
+  return (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<SnappingItemGroup*>(item));
+}
+
+// Promoted to class method
+bool SnappingUtils::isClose(double value, double target) {
+  return qAbs(value - target) < SNAP_DIST;
+}
+
 double SnappingUtils::snapToGridVal(double val, int gridSize) {
   return std::round(val / gridSize) * gridSize;
 }
@@ -17,14 +28,31 @@ bool SnappingUtils::rangesOverlap(double min1, double len1, double min2, double 
   return max1 > min2 && min1 < max2;
 }
 
+QList<QGraphicsItem*> SnappingUtils::getSnappingCandidates(LayoutScene* scene, const QRectF& queryRect, QGraphicsItem* ignoreItem) {
+  QRectF searchRect = queryRect.adjusted(-SNAP_DIST, -SNAP_DIST, SNAP_DIST, SNAP_DIST);
+  QList<QGraphicsItem*> candidates = scene->items(searchRect, Qt::IntersectsItemBoundingRect);
+
+  QList<QGraphicsItem*> valid;
+  valid.reserve(candidates.size());
+
+  for (QGraphicsItem* item : candidates) {
+    if (item == ignoreItem)
+      continue;
+    if (item->parentItem() == ignoreItem)
+      continue;
+    if (ignoreItem->parentItem() == item)
+      continue;
+
+    if (isSnappableItem(item)) {
+      valid.append(item);
+    }
+  }
+  return valid;
+}
+
 QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem, const QPointF& proposedPos, const QRectF& logicalRect) {
   if (!scene)
     return proposedPos;
-
-  // 1. Calculate "Visual" coordinates (Future Scene Bounding Rect)
-  // logicalRect is in local coordinates.
-  // We assume the Item's origin (0,0) moves to proposedPos.
-  // So the visual top-left in scene is proposedPos + logicalRect.topLeft()
 
   QPointF contentOffset = logicalRect.topLeft();
 
@@ -36,28 +64,30 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
   double visualRight = visualLeft + width;
   double visualBottom = visualTop + height;
 
+  QRectF visualRect(visualLeft, visualTop, width, height);
   QRectF validArea = scene->getWorkingArea();
+
   bool snappedX = false;
   bool snappedY = false;
 
-  // --- 2. Snap to Guide Lines ---
+  // --- 1. Snap to Guide Lines ---
   for (QGraphicsItem* item : scene->items()) {
     if (GuideLineItem* guide = dynamic_cast<GuideLineItem*>(item)) {
       if (guide->orientation() == GuideLineItem::Vertical) {
         double guideX = guide->pos().x();
-        if (qAbs(visualLeft - guideX) < SNAP_DIST) {
+        if (isClose(visualLeft, guideX)) {
           visualLeft = guideX;
           snappedX = true;
-        } else if (qAbs(visualRight - guideX) < SNAP_DIST) {
+        } else if (isClose(visualRight, guideX)) {
           visualLeft = guideX - width;
           snappedX = true;
         }
       } else {
         double guideY = guide->pos().y();
-        if (qAbs(visualTop - guideY) < SNAP_DIST) {
+        if (isClose(visualTop, guideY)) {
           visualTop = guideY;
           snappedY = true;
-        } else if (qAbs(visualBottom - guideY) < SNAP_DIST) {
+        } else if (isClose(visualBottom, guideY)) {
           visualTop = guideY - height;
           snappedY = true;
         }
@@ -65,83 +95,73 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
     }
   }
 
-  // --- 3. Snap to Scene Bounds ---
+  // --- 2. Snap to Scene Bounds ---
   if (!snappedX) {
-    if (qAbs(visualLeft - validArea.left()) < SNAP_DIST) {
+    if (isClose(visualLeft, validArea.left())) {
       visualLeft = validArea.left();
       snappedX = true;
-    } else if (qAbs(visualRight - validArea.right()) < SNAP_DIST) {
+    } else if (isClose(visualRight, validArea.right())) {
       visualLeft = validArea.right() - width;
       snappedX = true;
     }
   }
 
   if (!snappedY) {
-    if (qAbs(visualTop - validArea.top()) < SNAP_DIST) {
+    if (isClose(visualTop, validArea.top())) {
       visualTop = validArea.top();
       snappedY = true;
-    } else if (qAbs(visualBottom - validArea.bottom()) < SNAP_DIST) {
+    } else if (isClose(visualBottom, validArea.bottom())) {
       visualTop = validArea.bottom() - height;
       snappedY = true;
     }
   }
 
-  // --- 4. Snap to Other Items ---
+  // --- 3. Snap to Other Items ---
   if (!snappedX || !snappedY) {
-    for (QGraphicsItem* item : scene->items()) {
-      if (item == selfItem)
-        continue;
+    QList<QGraphicsItem*> nearbyItems = getSnappingCandidates(scene, visualRect, selfItem);
 
-      // Skip if 'item' is a child of 'selfItem' (e.g. inside the group moving)
-      if (item->parentItem() == selfItem)
-        continue;
-
-      // Skip if 'selfItem' is a child of 'item' (should not happen in top-level check but good safety)
-      if (selfItem->parentItem() == item)
-        continue;
-
-      if (!(dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<SnappingItemGroup*>(item)))
-        continue;
-
+    for (QGraphicsItem* item : nearbyItems) {
       QRectF otherRect = item->sceneBoundingRect();
+      double otherL = otherRect.left();
+      double otherR = otherRect.right();
+      double otherT = otherRect.top();
+      double otherB = otherRect.bottom();
 
-      // Snap X
-      if (!snappedX && rangesOverlap(visualTop, height, otherRect.top(), otherRect.height())) {
-        if (qAbs(visualLeft - otherRect.right()) < SNAP_DIST) {
-          visualLeft = otherRect.right();
+      if (!snappedX && rangesOverlap(visualTop, height, otherT, otherRect.height())) {
+        if (isClose(visualLeft, otherR)) {
+          visualLeft = otherR;
           snappedX = true;
-        } else if (qAbs(visualLeft - otherRect.left()) < SNAP_DIST) {
-          visualLeft = otherRect.left();
+        } else if (isClose(visualLeft, otherL)) {
+          visualLeft = otherL;
           snappedX = true;
-        } else if (qAbs(visualRight - otherRect.left()) < SNAP_DIST) {
-          visualLeft = otherRect.left() - width;
+        } else if (isClose(visualRight, otherL)) {
+          visualLeft = otherL - width;
           snappedX = true;
-        } else if (qAbs(visualRight - otherRect.right()) < SNAP_DIST) {
-          visualLeft = otherRect.right() - width;
+        } else if (isClose(visualRight, otherR)) {
+          visualLeft = otherR - width;
           snappedX = true;
         }
       }
 
-      // Snap Y
-      if (!snappedY && rangesOverlap(visualLeft, width, otherRect.left(), otherRect.width())) {
-        if (qAbs(visualTop - otherRect.bottom()) < SNAP_DIST) {
-          visualTop = otherRect.bottom();
+      if (!snappedY && rangesOverlap(visualLeft, width, otherL, otherRect.width())) {
+        if (isClose(visualTop, otherB)) {
+          visualTop = otherB;
           snappedY = true;
-        } else if (qAbs(visualTop - otherRect.top()) < SNAP_DIST) {
-          visualTop = otherRect.top();
+        } else if (isClose(visualTop, otherT)) {
+          visualTop = otherT;
           snappedY = true;
-        } else if (qAbs(visualBottom - otherRect.top()) < SNAP_DIST) {
-          visualTop = otherRect.top() - height;
+        } else if (isClose(visualBottom, otherT)) {
+          visualTop = otherT - height;
           snappedY = true;
-        } else if (qAbs(visualBottom - otherRect.bottom()) < SNAP_DIST) {
-          visualTop = otherRect.bottom() - height;
+        } else if (isClose(visualBottom, otherB)) {
+          visualTop = otherB - height;
           snappedY = true;
         }
       }
     }
   }
 
-  // --- 5. Snap to Grid ---
+  // --- 4. Snap to Grid ---
   if (scene->isGridEnabled()) {
     int gs = scene->gridSize();
     if (!snappedX)
@@ -150,7 +170,7 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
       visualTop = snapToGridVal(visualTop, gs);
   }
 
-  // --- 6. Final Boundary Clamping ---
+  // --- 5. Final Boundary Clamping ---
   if (visualLeft < validArea.left())
     visualLeft = validArea.left();
   if (visualLeft + width > validArea.right())
@@ -160,6 +180,5 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
   if (visualTop + height > validArea.bottom())
     visualTop = validArea.bottom() - height;
 
-  // --- Convert Visual Position back to Item Position ---
   return QPointF(visualLeft - contentOffset.x(), visualTop - contentOffset.y());
 }

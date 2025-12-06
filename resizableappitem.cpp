@@ -11,11 +11,10 @@
 #include <QPen>
 #include <cmath>
 #include "layoutscene.h"
-#include "snappingutils.h"  // NEW INCLUDE
+#include "snappingutils.h"
 #include "zoneitem.h"
 
-// Define SNAP_DIST locally for resizing logic if needed, or use SnappingUtils constants if exposed
-const double RESIZE_SNAP_DIST = 15.0;
+// REMOVED local constant, now using SnappingUtils::isClose / SNAP_DIST
 
 ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
     : QGraphicsRectItem(rect), m_resizeHandle(None), m_name(appName), m_locked(false) {
@@ -126,7 +125,6 @@ QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant&
   if (change == ItemPositionChange && scene()) {
     LayoutScene* layoutScene = dynamic_cast<LayoutScene*>(scene());
     if (layoutScene) {
-      // REFACTORED: Use shared SnappingUtils
       return SnappingUtils::snapPosition(layoutScene, this, value.toPointF(), rect());
     }
   }
@@ -188,7 +186,6 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     return;
   }
 
-  // Resizing Logic (Kept local as it modifies Rect, not Position)
   if (m_resizeHandle != None) {
     QPointF mouseScenePos = event->scenePos();
     LayoutScene* layoutScene = dynamic_cast<LayoutScene*>(scene());
@@ -214,7 +211,7 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     bool snappedW = false;
     bool snappedH = false;
 
-    // Use SnappingUtils helpers for consistency
+    // Use SnappingUtils helper
     if (m_resizeHandle & Right) {
       for (QGraphicsItem* item : scene()->items()) {
         if (item == this)
@@ -225,19 +222,19 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
         QRectF other = otherItem->mapRectToScene(otherItem->rect());
 
         if (SnappingUtils::rangesOverlap(currentY, rect().height(), other.top(), other.height())) {
-          if (qAbs(proposedRight - other.left()) < RESIZE_SNAP_DIST) {
+          if (SnappingUtils::isClose(proposedRight, other.left())) {
             proposedRight = other.left();
             snappedW = true;
             break;
           }
-          if (qAbs(proposedRight - other.right()) < RESIZE_SNAP_DIST) {
+          if (SnappingUtils::isClose(proposedRight, other.right())) {
             proposedRight = other.right();
             snappedW = true;
             break;
           }
         }
       }
-      if (!snappedW && qAbs(proposedRight - validArea.right()) < RESIZE_SNAP_DIST) {
+      if (!snappedW && SnappingUtils::isClose(proposedRight, validArea.right())) {
         proposedRight = validArea.right();
         snappedW = true;
       }
@@ -253,19 +250,19 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
         QRectF other = otherItem->mapRectToScene(otherItem->rect());
 
         if (SnappingUtils::rangesOverlap(currentX, rect().width(), other.left(), other.width())) {
-          if (qAbs(proposedBottom - other.top()) < RESIZE_SNAP_DIST) {
+          if (SnappingUtils::isClose(proposedBottom, other.top())) {
             proposedBottom = other.top();
             snappedH = true;
             break;
           }
-          if (qAbs(proposedBottom - other.bottom()) < RESIZE_SNAP_DIST) {
+          if (SnappingUtils::isClose(proposedBottom, other.bottom())) {
             proposedBottom = other.bottom();
             snappedH = true;
             break;
           }
         }
       }
-      if (!snappedH && qAbs(proposedBottom - validArea.bottom()) < RESIZE_SNAP_DIST) {
+      if (!snappedH && SnappingUtils::isClose(proposedBottom, validArea.bottom())) {
         proposedBottom = validArea.bottom();
         snappedH = true;
       }

@@ -2,7 +2,6 @@
 #define MAINWINDOW_H
 
 #include <QComboBox>
-#include <QDomDocument>
 #include <QEvent>
 #include <QGraphicsView>
 #include <QLabel>
@@ -10,7 +9,6 @@
 #include <QSlider>
 #include "snappingitemgroup.h"
 
-// Forward declarations
 class LayoutScene;
 class RulerBar;
 
@@ -47,27 +45,18 @@ private slots:
   void groupItems();
   void ungroupItems();
 
-  // REMOVED: Alignment/Distribution proxy slots (now connected directly)
-
 private:
   void createToolbar();
   void updateRulers();
 
-  // Helper to generate template XML
   QString getTemplateXml(const QString& name);
 
-  // Shared Helper: Parses a QDomDocument and populates the scene
-  void loadLayoutFromDoc(const QDomDocument& doc);
-
-  // Scene & View
   LayoutScene* scene;
   QGraphicsView* view;
 
-  // Rulers
   RulerBar* m_hRuler;
   RulerBar* m_vRuler;
 
-  // UI Controls
   QSlider* gridSlider;
   QLabel* gridLabel;
   QComboBox* typeCombo;

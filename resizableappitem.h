@@ -15,6 +15,9 @@ public:
   void setLocked(bool locked);
   bool isLocked() const;
 
+  // Make public so MainWindow can call it after resizing via SpinBox
+  void updateStatusText();
+
 protected:
   QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
   void hoverMoveEvent(QGraphicsSceneHoverEvent* event) override;
@@ -27,11 +30,9 @@ protected:
 
 private:
   int getHandleAt(const QPointF& pt);
-  void updateStatusText();
 
   int m_resizeHandle;
   QString m_name;
-  // REMOVED: const double SNAP_DIST = 15.0; // Now handled in SnappingUtils or local static for resizing
 
   QGraphicsTextItem* m_statusText;
   bool m_locked;

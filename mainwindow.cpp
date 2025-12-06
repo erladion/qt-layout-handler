@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "guidelineitem.h"
 #include "layoutscene.h"
+#include "layoutserializer.h"  // NEW
 #include "resizableappitem.h"
 #include "rulerbar.h"
 #include "snappingitemgroup.h"
@@ -153,18 +154,27 @@ void MainWindow::addWindow() {
     h = 400;
   }
 
-  ResizableAppItem* item = new ResizableAppItem(type, QRectF(0, 0, w, h));
+  // REFACTOR: Use Scene Factory
+  ResizableAppItem* item = scene->addAppItem(type, QRectF(0, 0, w, h));
   QRectF safe = scene->getWorkingArea();
 
-  int startX = safe.left() + QRandomGenerator::global()->bounded((int)safe.width() - 200);
-  int startY = safe.top() + QRandomGenerator::global()->bounded((int)safe.height() - 200);
+  int maxX = static_cast<int>(safe.width()) - 200;
+  int maxY = static_cast<int>(safe.height()) - 200;
+
+  int startX = safe.left();
+  if (maxX > 0)
+    startX += QRandomGenerator::global()->bounded(maxX);
+
+  int startY = safe.top();
+  if (maxY > 0)
+    startY += QRandomGenerator::global()->bounded(maxY);
 
   if (scene->isGridEnabled()) {
     startX = std::round(startX / (double)scene->gridSize()) * scene->gridSize();
     startY = std::round(startY / (double)scene->gridSize()) * scene->gridSize();
   }
+
   item->setPos(startX, startY);
-  scene->addItem(item);
 }
 
 void MainWindow::addZone() {
@@ -188,11 +198,28 @@ void MainWindow::removeWindow() {
 
 void MainWindow::groupItems() {
   QList<QGraphicsItem*> selected = scene->selectedItems();
+
+  SnappingItemGroup* existingGroup = nullptr;
   QList<QGraphicsItem*> itemsToGroup;
+  int groupCount = 0;
+
   for (QGraphicsItem* item : selected) {
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item)) {
+    if (SnappingItemGroup* grp = dynamic_cast<SnappingItemGroup*>(item)) {
+      existingGroup = grp;
+      groupCount++;
+    } else if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item)) {
       itemsToGroup.append(item);
     }
+  }
+
+  if (groupCount == 1 && !itemsToGroup.isEmpty()) {
+    for (QGraphicsItem* item : itemsToGroup) {
+      item->setSelected(false);
+      existingGroup->addToGroup(item);
+    }
+    existingGroup->update();
+    statusBar()->showMessage("Added item(s) to existing group.", 2000);
+    return;
   }
 
   if (itemsToGroup.size() < 2) {
@@ -202,6 +229,7 @@ void MainWindow::groupItems() {
 
   SnappingItemGroup* group = new SnappingItemGroup(scene);
   for (QGraphicsItem* item : itemsToGroup) {
+    item->setSelected(false);
     group->addToGroup(item);
   }
 
@@ -280,42 +308,14 @@ QString MainWindow::getTemplateXml(const QString& name) {
   return "";
 }
 
-void MainWindow::loadLayoutFromDoc(const QDomDocument& doc) {
-  QList<QGraphicsItem*> items = scene->items();
-  for (auto item : items) {
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item)) {
-      scene->removeItem(item);
-      delete item;
-    }
-  }
-
-  QDomElement root = doc.documentElement();
-  QDomNode node = root.firstChild();
-  while (!node.isNull()) {
-    QDomElement el = node.toElement();
-    if (!el.isNull() && el.tagName() == "App") {
-      ResizableAppItem* item =
-          new ResizableAppItem(el.attribute("name"), QRectF(0, 0, el.attribute("width").toDouble(), el.attribute("height").toDouble()));
-
-      item->setPos(el.attribute("x").toDouble(), el.attribute("y").toDouble());
-      if (el.hasAttribute("z")) {
-        item->setZValue(el.attribute("z").toDouble());
-      }
-      scene->addItem(item);
-    }
-    node = node.nextSibling();
-  }
-}
-
 void MainWindow::applyTemplate(QAction* action) {
   QString presetName = action->text();
   QString xmlContent = getTemplateXml(presetName);
   if (xmlContent.isEmpty())
     return;
 
-  QDomDocument doc;
-  if (doc.setContent(xmlContent)) {
-    loadLayoutFromDoc(doc);
+  // Use Serializer
+  if (LayoutSerializer::loadFromXml(scene, xmlContent)) {
     statusBar()->showMessage("Applied template: " + presetName, 3000);
   } else {
     statusBar()->showMessage("Error parsing template XML.", 3000);
@@ -326,26 +326,11 @@ void MainWindow::saveLayout() {
   QString fileName = QFileDialog::getSaveFileName(this, "Save Layout", "", "XML Files (*.xml)");
   if (fileName.isEmpty())
     return;
-  QDomDocument doc;
-  QDomElement root = doc.createElement("Layout");
-  doc.appendChild(root);
-  for (auto item : scene->items()) {
-    if (auto appItem = dynamic_cast<ResizableAppItem*>(item)) {
-      QDomElement appEl = doc.createElement("App");
-      appEl.setAttribute("name", appItem->name());
-      appEl.setAttribute("x", appItem->pos().x());
-      appEl.setAttribute("y", appItem->pos().y());
-      appEl.setAttribute("width", appItem->rect().width());
-      appEl.setAttribute("height", appItem->rect().height());
-      appEl.setAttribute("z", appItem->zValue());
-      root.appendChild(appEl);
-    }
-  }
-  QFile file(fileName);
-  if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    QTextStream stream(&file);
-    stream << doc.toString();
-    file.close();
+
+  if (LayoutSerializer::save(scene, fileName)) {
+    statusBar()->showMessage("Layout saved.", 3000);
+  } else {
+    statusBar()->showMessage("Failed to save layout.", 3000);
   }
 }
 
@@ -354,19 +339,11 @@ void MainWindow::loadLayout() {
   if (fileName.isEmpty())
     return;
 
-  QFile file(fileName);
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-    return;
-
-  QDomDocument doc;
-  if (!doc.setContent(&file)) {
-    file.close();
-    return;
+  if (LayoutSerializer::load(scene, fileName)) {
+    statusBar()->showMessage("Layout loaded from file.", 3000);
+  } else {
+    statusBar()->showMessage("Failed to load layout.", 3000);
   }
-  file.close();
-
-  loadLayoutFromDoc(doc);
-  statusBar()->showMessage("Layout loaded from file.", 3000);
 }
 
 void MainWindow::createToolbar() {
@@ -400,7 +377,6 @@ void MainWindow::createToolbar() {
   connect(toolbar->addAction(QIcon(":/icons/zone.svg"), "Add Zone"), &QAction::triggered, this, &MainWindow::addZone);
 
   QAction* removeAct = toolbar->addAction(QIcon(":/icons/remove.svg"), "Remove");
-  // Set both Delete and Backspace as shortcuts
   removeAct->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
   connect(removeAct, &QAction::triggered, this, &MainWindow::removeWindow);
 
@@ -419,7 +395,6 @@ void MainWindow::createToolbar() {
 
   toolbar->addSeparator();
 
-  // FIX: Direct connections to LayoutScene slots, removing proxy functions
   connect(toolbar->addAction(QIcon(":/icons/align-left.svg"), "L"), &QAction::triggered, scene, &LayoutScene::alignSelectionLeft);
   connect(toolbar->addAction(QIcon(":/icons/align-center-h.svg"), "CH"), &QAction::triggered, scene, &LayoutScene::alignSelectionCenterH);
   connect(toolbar->addAction(QIcon(":/icons/align-right.svg"), "R"), &QAction::triggered, scene, &LayoutScene::alignSelectionRight);

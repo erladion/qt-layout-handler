@@ -11,10 +11,12 @@ public:
   explicit SnappingItemGroup(LayoutScene* scene, QGraphicsItem* parent = nullptr);
   QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
+  // Override to draw the group border
+  QRectF boundingRect() const override;
+  void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+
 private:
   LayoutScene* m_layoutScene;
-  // REMOVED: const double SNAP_DIST = 15.0; // Handled in SnappingUtils
-  // REMOVED: Helper functions snapToGridVal, rangesOverlap // Handled in SnappingUtils
 };
 
 #endif  // SNAPPINGITEMGROUP_H
