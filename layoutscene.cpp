@@ -21,8 +21,10 @@ static QList<QGraphicsItem*> getAlignableItems(const QList<QGraphicsItem*>& sele
   QList<QGraphicsItem*> valid;
   valid.reserve(selection.size());
   for (auto item : selection) {
-    if (SnappingUtils::isSnappableItem(item))
+    // FIX: Allow GuideLines to be aligned in addition to standard snappable items
+    if (SnappingUtils::isSnappableItem(item) || dynamic_cast<GuideLineItem*>(item)) {
       valid.append(item);
+    }
   }
   return valid;
 }
@@ -221,6 +223,11 @@ void LayoutScene::clearLayout() {
 // Centralized Factory for App Items
 ResizableAppItem* LayoutScene::addAppItem(const QString& name, const QRectF& rect) {
   ResizableAppItem* item = new ResizableAppItem(name, rect);
+
+  // Auto-scale font based on layout height
+  qreal scale = sceneRect().height() / 1080.0;
+  item->setFontScale(scale);
+
   addItem(item);
   return item;
 }
