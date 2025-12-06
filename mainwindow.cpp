@@ -11,25 +11,34 @@
 #include "zoneitem.h"
 
 #include <QAction>
+#include <QCloseEvent>
+#include <QComboBox>
+#include <QDomDocument>
 #include <QFileDialog>
 #include <QGraphicsItemGroup>
+#include <QGraphicsPixmapItem>
 #include <QGraphicsView>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QRandomGenerator>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTextStream>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
+#include <algorithm>
+#include <cmath>
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), scene(nullptr) {
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), scene(nullptr), m_isModified(false) {
   resize(1400, 900);
   setWindowTitle("Layout Manager");
 
@@ -89,7 +98,51 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), scene(nullptr) {
   });
 }
 
-MainWindow::~MainWindow() {}
+MainWindow::~MainWindow() {
+  if (scene) {
+    scene->disconnect(this);
+  }
+}
+
+// NEW: Prompt to save on exit
+void MainWindow::closeEvent(QCloseEvent* event) {
+  if (maybeSave()) {
+    event->accept();
+  } else {
+    event->ignore();
+  }
+}
+
+// NEW: Helper to handle unsaved changes logic
+bool MainWindow::maybeSave() {
+  if (!m_isModified)
+    return true;
+
+  const QMessageBox::StandardButton ret = QMessageBox::warning(this, tr("Unsaved Changes"),
+                                                               tr("The document has been modified.\n"
+                                                                  "Do you want to save your changes?"),
+                                                               QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+
+  switch (ret) {
+    case QMessageBox::Save:
+      return saveLayout();
+    case QMessageBox::Cancel:
+      return false;
+    default:
+      break;
+  }
+  return true;
+}
+
+// NEW: Update window title and state
+void MainWindow::setModified(bool modified) {
+  m_isModified = modified;
+  QString title = "Layout Manager";
+  if (m_isModified) {
+    title += " *";
+  }
+  setWindowTitle(title);
+}
 
 void MainWindow::updateInterfaceState() {
   bool hasScene = (scene != nullptr);
@@ -114,6 +167,10 @@ void MainWindow::updateInterfaceState() {
 }
 
 void MainWindow::newLayout() {
+  // Check for unsaved changes before destroying current scene
+  if (!maybeSave())
+    return;
+
   NewLayoutDialog dlg(this);
   if (dlg.exec() == QDialog::Accepted) {
     if (scene) {
@@ -134,12 +191,19 @@ void MainWindow::newLayout() {
     view->setScene(scene);
     updateInterfaceState();
 
+    // Reset modified state for new layout
+    setModified(false);
+
     view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
     statusBar()->showMessage(QString("Created new layout: %1x%2").arg(w).arg(h));
   }
 }
 
 void MainWindow::closeLayout() {
+  // Check for unsaved changes
+  if (!maybeSave())
+    return;
+
   if (!scene)
     return;
 
@@ -152,6 +216,7 @@ void MainWindow::closeLayout() {
     m_propDialog->setItem(nullptr);
 
   updateInterfaceState();
+  setModified(false);  // Reset state
   statusBar()->showMessage("Layout closed.");
 }
 
@@ -250,8 +315,14 @@ void MainWindow::onSelectionChanged() {
 
 void MainWindow::onSceneChanged(const QList<QRectF>& region) {
   Q_UNUSED(region);
-  if (scene && m_propDialog && m_propDialog->isVisible() && !scene->selectedItems().isEmpty()) {
-    m_propDialog->refreshValues();
+  if (scene) {
+    // Mark as modified if we detect scene changes
+    if (!m_isModified)
+      setModified(true);
+
+    if (m_propDialog && m_propDialog->isVisible() && !scene->selectedItems().isEmpty()) {
+      m_propDialog->refreshValues();
+    }
   }
 }
 
@@ -391,22 +462,39 @@ QString MainWindow::getTemplateXml(const QString& name) {
 void MainWindow::applyTemplate(QAction* action) {
   if (!scene)
     return;
+  // Check if we should discard current changes before applying template
+  if (!maybeSave())
+    return;
+
   QString presetName = action->text();
   QString xmlContent = getTemplateXml(presetName);
   if (!xmlContent.isEmpty() && LayoutSerializer::loadFromXml(scene, xmlContent)) {
+    setModified(false);  // Template is a fresh start
     statusBar()->showMessage("Applied template: " + presetName, 3000);
   }
 }
 
-void MainWindow::saveLayout() {
+bool MainWindow::saveLayout() {
   if (!scene)
-    return;
+    return false;
   QString fileName = QFileDialog::getSaveFileName(this, "Save Layout", "", "XML Files (*.xml)");
-  if (!fileName.isEmpty())
-    LayoutSerializer::save(scene, fileName);
+  if (fileName.isEmpty())
+    return false;
+
+  if (LayoutSerializer::save(scene, fileName)) {
+    setModified(false);
+    statusBar()->showMessage("Layout saved.", 3000);
+    return true;
+  } else {
+    statusBar()->showMessage("Failed to save layout.", 3000);
+    return false;
+  }
 }
 
 void MainWindow::loadLayout() {
+  if (!maybeSave())
+    return;
+
   QString fileName = QFileDialog::getOpenFileName(this, "Load Layout", "", "XML Files (*.xml)");
   if (fileName.isEmpty())
     return;
@@ -421,6 +509,7 @@ void MainWindow::loadLayout() {
   }
 
   if (LayoutSerializer::load(scene, fileName)) {
+    setModified(false);
     statusBar()->showMessage("Layout loaded from file.", 3000);
   } else {
     statusBar()->showMessage("Failed to load layout.", 3000);
@@ -439,7 +528,6 @@ void MainWindow::createMenuBar() {
 void MainWindow::createToolbar() {
   OfficeToolbar* ribbon = new OfficeToolbar(this);
 
-  // FIX: Styling for Menus only. Removed QSlider styles to keep it native.
   QString controlStyle = R"(
       QMenu {
           background-color: #ffffff;
@@ -491,10 +579,7 @@ void MainWindow::createToolbar() {
   addMenu->addAction("Terminal");
   addMenu->addAction("Music Player");
   addMenu->addAction("File Manager");
-
-  // Explicitly set style on the menu instance
   addMenu->setStyleSheet(controlStyle);
-
   addBtn->setMenu(addMenu);
   connect(addMenu, &QMenu::triggered, this, &MainWindow::addApp);
   m_secInsert->addLargeButton((RibbonButton*)addBtn);
@@ -517,10 +602,7 @@ void MainWindow::createToolbar() {
   QMenu* tempMenu = new QMenu(tempBtn);
   tempMenu->addAction("Coding");
   tempMenu->addAction("Streaming");
-
-  // Explicitly set style on the menu instance
   tempMenu->setStyleSheet(controlStyle);
-
   tempBtn->setMenu(tempMenu);
   connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
   m_secInsert->addWidget(tempBtn, 1, 3);
@@ -603,7 +685,6 @@ void MainWindow::createToolbar() {
   gridSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
   gridSlider->setEnabled(false);
 
-  // FIX: Removed gridSlider->setStyleSheet to restore native look
   connect(gridSlider, &QSlider::valueChanged, this, &MainWindow::onGridSizeChanged);
   m_secView->addWidget(gridSlider, 1, 0);
 
