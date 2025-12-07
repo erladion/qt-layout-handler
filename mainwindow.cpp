@@ -43,7 +43,7 @@
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), m_pScene(nullptr), m_pToolbar(nullptr), m_isModified(false), m_pTopBarSpin(nullptr), m_pBotBarSpin(nullptr) {
   resize(1400, 900);
-  setWindowTitle("Layout Manager");
+  setWindowTitle("Layout Editor");
 
   m_pView = new QGraphicsView(this);
   m_pView->setBackgroundBrush(QColor(Constants::Color::ViewBackgroundEmpty));
@@ -139,7 +139,7 @@ bool MainWindow::maybeSave() {
 
 void MainWindow::setModified(bool modified) {
   m_isModified = modified;
-  QString title = "Layout Manager";
+  QString title = "Layout Editor";
   if (m_isModified) {
     title += " *";
   }
