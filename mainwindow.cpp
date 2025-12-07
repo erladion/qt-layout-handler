@@ -1,4 +1,16 @@
 #include "mainwindow.h"
+#include "constants.h"
+#include "guidelineitem.h"
+#include "layoutscene.h"
+#include "layoutserializer.h"
+#include "newlayoutdialog.h"
+#include "officetoolbar.h"
+#include "propertiesdialog.h"
+#include "resizableappitem.h"
+#include "rulerbar.h"
+#include "settingsdialog.h"
+#include "snappingitemgroup.h"
+#include "zoneitem.h"
 
 #include <QAction>
 #include <QCloseEvent>
@@ -28,94 +40,71 @@
 #include <algorithm>
 #include <cmath>
 
-#include "guidelineitem.h"
-#include "layoutscene.h"
-#include "layoutserializer.h"
-#include "newlayoutdialog.h"
-#include "officetoolbar.h"
-#include "propertiesdialog.h"
-#include "resizableappitem.h"
-#include "rulerbar.h"
-#include "settingsdialog.h"
-#include "snappingitemgroup.h"
-#include "zoneitem.h"
-
 MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent),
-      scene(nullptr),
-      m_toolbar(nullptr),
-      m_isModified(false),
-      m_hRuler(nullptr),
-      m_vRuler(nullptr),
-      m_corner(nullptr),  // Initialize pointers
-      m_topBarSpin(nullptr),
-      m_botBarSpin(nullptr) {
+    : QMainWindow(parent), m_pScene(nullptr), m_pToolbar(nullptr), m_isModified(false), m_pTopBarSpin(nullptr), m_pBotBarSpin(nullptr) {
   resize(1400, 900);
   setWindowTitle("Layout Manager");
 
-  view = new QGraphicsView(this);
-  view->setBackgroundBrush(QColor("#202020"));
-  view->setRenderHint(QPainter::Antialiasing);
-  view->setFrameShape(QFrame::NoFrame);
+  m_pView = new QGraphicsView(this);
+  m_pView->setBackgroundBrush(QColor(Constants::Color::ViewBackgroundEmpty));
+  m_pView->setRenderHint(QPainter::Antialiasing);
+  m_pView->setFrameShape(QFrame::NoFrame);
 
-  view->setDragMode(QGraphicsView::RubberBandDrag);
-  view->setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
-  view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  view->setResizeAnchor(QGraphicsView::AnchorViewCenter);
-  view->setOptimizationFlags(QGraphicsView::DontSavePainterState |
-                             QGraphicsView::DontAdjustForAntialiasing);
+  m_pView->setDragMode(QGraphicsView::RubberBandDrag);
+  m_pView->setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
+  m_pView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  m_pView->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  m_pView->setResizeAnchor(QGraphicsView::AnchorViewCenter);
+  m_pView->setOptimizationFlags(QGraphicsView::DontSavePainterState | QGraphicsView::DontAdjustForAntialiasing);
 
-  m_hRuler = new RulerBar(RulerBar::Horizontal, view, this);
-  m_vRuler = new RulerBar(RulerBar::Vertical, view, this);
+  m_pHRuler = new RulerBar(RulerBar::Horizontal, m_pView, this);
+  m_pVRuler = new RulerBar(RulerBar::Vertical, m_pView, this);
 
-  // FIX: Initialize member variable m_corner instead of local variable
-  m_corner = new QWidget(this);
-  m_corner->setFixedSize(25, 25);
-  m_corner->setStyleSheet("background-color: #2b2b2b;");
+  m_pCorner = new QWidget(this);
+  m_pCorner->setFixedSize(25, 25);
+  m_pCorner->setStyleSheet(QString("background-color: %1;").arg(QColor(Constants::Color::CornerWidget).name()));
 
   QWidget* central = new QWidget(this);
   QGridLayout* grid = new QGridLayout(central);
   grid->setSpacing(0);
   grid->setContentsMargins(0, 0, 0, 0);
 
-  // FIX: Add m_corner to the grid
-  grid->addWidget(m_corner, 0, 0);
-  grid->addWidget(m_hRuler, 0, 1);
-  grid->addWidget(m_vRuler, 1, 0);
-  grid->addWidget(view, 1, 1);
+  grid->addWidget(m_pCorner, 0, 0);
+  grid->addWidget(m_pHRuler, 0, 1);
+  grid->addWidget(m_pVRuler, 1, 0);
+  grid->addWidget(m_pView, 1, 1);
 
   setCentralWidget(central);
 
-  view->viewport()->setMouseTracking(true);
+  m_pView->viewport()->setMouseTracking(true);
 
-  view->viewport()->installEventFilter(this);
-  m_hRuler->installEventFilter(this);
-  m_vRuler->installEventFilter(this);
+  m_pView->viewport()->installEventFilter(this);
+  // FIX: Updated variable name to m_pHRuler
+  m_pHRuler->installEventFilter(this);
+  m_pVRuler->installEventFilter(this);
 
-  m_propDialog = new PropertiesDialog(view);
-  m_propDialog->hide();
-  m_propDialog->move(20, 20);
+  m_pProperties = new PropertiesDialog(m_pView);
+  m_pProperties->hide();
+  m_pProperties->move(20, 20);
 
   createToolbar();
   createMenuBar();
 
   updateInterfaceState();
-  statusBar()->showMessage(
-      "No active layout. Create a New Layout (File -> New) to begin.");
+  statusBar()->showMessage("No active layout. Create a New Layout (File -> New) to begin.", Constants::StatusMessageDuration);
 
   QTimer::singleShot(100, this, [this]() {
-    if (view && scene) {
-      view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
-      m_hRuler->update();
-      m_vRuler->update();
+    if (m_pView && m_pScene) {
+      m_pView->fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
+      m_pHRuler->update();
+      m_pVRuler->update();
     }
   });
 }
 
 MainWindow::~MainWindow() {
-  if (scene) {
-    scene->disconnect(this);
+  if (m_pScene) {
+    m_pScene->disconnect(this);
   }
 }
 
@@ -128,13 +117,13 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 bool MainWindow::maybeSave() {
-  if (!m_isModified) return true;
+  if (!m_isModified)
+    return true;
 
-  const QMessageBox::StandardButton ret = QMessageBox::warning(
-      this, tr("Unsaved Changes"),
-      tr("The document has been modified.\n"
-         "Do you want to save your changes?"),
-      QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+  const QMessageBox::StandardButton ret = QMessageBox::warning(this, tr("Unsaved Changes"),
+                                                               tr("The document has been modified.\n"
+                                                                  "Do you want to save your changes?"),
+                                                               QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
 
   switch (ret) {
     case QMessageBox::Save:
@@ -157,126 +146,125 @@ void MainWindow::setModified(bool modified) {
 }
 
 void MainWindow::connectSceneSignals() {
-  if (!scene) return;
-  connect(scene, &QGraphicsScene::selectionChanged, this,
-          &MainWindow::onSelectionChanged);
-  connect(scene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
+  if (!m_pScene)
+    return;
+  connect(m_pScene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
+  connect(m_pScene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
 }
 
 void MainWindow::updateInterfaceState() {
-  bool hasScene = (scene != nullptr);
+  bool hasScene = (m_pScene != nullptr);
 
-  if (m_secInsert) m_secInsert->setEnabled(hasScene);
-  if (m_secArrange) m_secArrange->setEnabled(hasScene);
-  if (m_secAlign) m_secAlign->setEnabled(hasScene);
-  if (m_secView) m_secView->setEnabled(hasScene);
+  if (m_pSectionInsert)
+    m_pSectionInsert->setEnabled(hasScene);
+  if (m_pSectionArrange)
+    m_pSectionArrange->setEnabled(hasScene);
+  if (m_pSectionAlign)
+    m_pSectionAlign->setEnabled(hasScene);
+  if (m_pSectionView)
+    m_pSectionView->setEnabled(hasScene);
 
-  m_hRuler->setVisible(hasScene);
-  m_vRuler->setVisible(hasScene);
-
-  // FIX: Toggle corner widget visibility based on scene state
-  if (m_corner) m_corner->setVisible(hasScene);
+  m_pHRuler->setVisible(hasScene);
+  m_pVRuler->setVisible(hasScene);
+  if (m_pCorner)
+    m_pCorner->setVisible(hasScene);
 
   if (hasScene) {
-    view->setBackgroundBrush(this->palette().window());
+    m_pView->setBackgroundBrush(this->palette().window());
   } else {
-    view->setBackgroundBrush(QColor("#202020"));
+    m_pView->setBackgroundBrush(QColor(Constants::Color::ViewBackgroundEmpty));
   }
 }
 
 void MainWindow::newLayout() {
-  if (!maybeSave()) return;
+  if (!maybeSave())
+    return;
 
   NewLayoutDialog dlg(this);
   if (dlg.exec() == QDialog::Accepted) {
-    if (scene) {
-      scene->deleteLater();
+    if (m_pScene) {
+      m_pScene->deleteLater();
     }
 
     int w = dlg.selectedWidth();
     int h = dlg.selectedHeight();
 
-    scene = new LayoutScene(0, 0, w, h, this);
-    scene->setItemIndexMethod(QGraphicsScene::NoIndex);
+    m_pScene = new LayoutScene(0, 0, w, h, this);
+    m_pScene->setItemIndexMethod(QGraphicsScene::NoIndex);
 
-    int defTop = SettingsDialog::getTopBarHeight();
-    int defBot = SettingsDialog::getBottomBarHeight();
-    scene->setTopBarHeight(defTop);
-    scene->setBottomBarHeight(defBot);
+    m_pScene->setTopBarHeight(SettingsDialog::getTopBarHeight());
+    m_pScene->setBottomBarHeight(SettingsDialog::getBottomBarHeight());
 
     connectSceneSignals();
 
-    view->setScene(scene);
+    m_pView->setScene(m_pScene);
     updateInterfaceState();
     setModified(false);
 
     // Update UI controls
-    if (m_topBarSpin) {
-      m_topBarSpin->blockSignals(true);
-      m_topBarSpin->setValue(defTop);
-      m_topBarSpin->blockSignals(false);
+    if (m_pTopBarSpin) {
+      m_pTopBarSpin->blockSignals(true);
+      m_pTopBarSpin->setValue(SettingsDialog::getTopBarHeight());
+      m_pTopBarSpin->blockSignals(false);
     }
-    if (m_botBarSpin) {
-      m_botBarSpin->blockSignals(true);
-      m_botBarSpin->setValue(defBot);
-      m_botBarSpin->blockSignals(false);
+    if (m_pBotBarSpin) {
+      m_pBotBarSpin->blockSignals(true);
+      m_pBotBarSpin->setValue(SettingsDialog::getBottomBarHeight());
+      m_pBotBarSpin->blockSignals(false);
     }
 
-    view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
-    statusBar()->showMessage(
-        QString("Created new layout: %1x%2").arg(w).arg(h));
+    m_pView->fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
+    statusBar()->showMessage(QString("Created new layout: %1x%2").arg(w).arg(h), Constants::StatusMessageDuration);
   }
 }
 
 void MainWindow::closeLayout() {
-  if (!maybeSave()) return;
-  if (!scene) return;
+  if (!maybeSave())
+    return;
+  if (!m_pScene)
+    return;
 
-  view->setScene(nullptr);
+  m_pView->setScene(nullptr);
 
-  scene->deleteLater();
-  scene = nullptr;
+  m_pScene->deleteLater();
+  m_pScene = nullptr;
 
-  if (m_propDialog) m_propDialog->setItem(nullptr);
+  if (m_pProperties)
+    m_pProperties->setItem(nullptr);
 
   updateInterfaceState();
   setModified(false);
-  statusBar()->showMessage("Layout closed.");
+  statusBar()->showMessage("Layout closed.", Constants::StatusMessageDuration);
 }
 
 void MainWindow::openSettings() {
   SettingsDialog dlg(this);
   if (dlg.exec() == QDialog::Accepted) {
-    // Retrieve new settings
-    int newFontSize = SettingsDialog::getAppFontSize();
-    int newTop = SettingsDialog::getTopBarHeight();
-    int newBot = SettingsDialog::getBottomBarHeight();
-
-    if (scene) {
-      // Apply Font Size to Items
-      for (auto item : scene->items()) {
+    if (m_pScene) {
+      int newSize = SettingsDialog::getAppFontSize();
+      for (auto item : m_pScene->items()) {
         if (auto app = dynamic_cast<ResizableAppItem*>(item)) {
-          app->setBaseFontSize(newFontSize);
+          app->setBaseFontSize(newSize);
         }
       }
+      // Also apply bar heights
+      int newTop = SettingsDialog::getTopBarHeight();
+      int newBot = SettingsDialog::getBottomBarHeight();
+      m_pScene->setTopBarHeight(newTop);
+      m_pScene->setBottomBarHeight(newBot);
 
-      // Apply Bar Heights to Current Scene
-      scene->setTopBarHeight(newTop);
-      scene->setBottomBarHeight(newBot);
-
-      // Update UI Spinboxes
-      if (m_topBarSpin) {
-        m_topBarSpin->blockSignals(true);
-        m_topBarSpin->setValue(newTop);
-        m_topBarSpin->blockSignals(false);
+      if (m_pTopBarSpin) {
+        m_pTopBarSpin->blockSignals(true);
+        m_pTopBarSpin->setValue(newTop);
+        m_pTopBarSpin->blockSignals(false);
       }
-      if (m_botBarSpin) {
-        m_botBarSpin->blockSignals(true);
-        m_botBarSpin->setValue(newBot);
-        m_botBarSpin->blockSignals(false);
+      if (m_pBotBarSpin) {
+        m_pBotBarSpin->blockSignals(true);
+        m_pBotBarSpin->setValue(newBot);
+        m_pBotBarSpin->blockSignals(false);
       }
     }
-    statusBar()->showMessage("Settings applied.");
+    statusBar()->showMessage("Settings applied.", Constants::StatusMessageDuration);
   }
 }
 
@@ -284,99 +272,109 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (event->type() == QEvent::MouseMove) {
     QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
     QPoint globalPos = mouseEvent->globalPos();
-    QPoint viewPos = view->viewport()->mapFromGlobal(globalPos);
-    m_hRuler->updateCursorPos(viewPos);
-    m_vRuler->updateCursorPos(viewPos);
+    QPoint viewPos = m_pView->viewport()->mapFromGlobal(globalPos);
+    m_pHRuler->updateCursorPos(viewPos);
+    m_pVRuler->updateCursorPos(viewPos);
   }
   return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event) {
   QMainWindow::resizeEvent(event);
-  if (view && scene) {
-    if (view->width() > 50 && view->height() > 50) {
-      view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
+  if (m_pView && m_pScene) {
+    if (m_pView->width() > 50 && m_pView->height() > 50) {
+      m_pView->fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
     }
-    m_hRuler->update();
-    m_vRuler->update();
+    m_pHRuler->update();
+    m_pVRuler->update();
   }
 }
 
 void MainWindow::updateRulers() {
-  m_hRuler->update();
-  m_vRuler->update();
+  m_pHRuler->update();
+  m_pVRuler->update();
 }
 
 void MainWindow::toggleGrid(bool checked) {
-  if (!scene) return;
-  scene->setGridEnabled(checked);
-  gridSlider->setEnabled(checked);
+  if (!m_pScene)
+    return;
+  m_pScene->setGridEnabled(checked);
+  m_pGridSlider->setEnabled(checked);
   updateRulers();
 }
 
 void MainWindow::onGridSizeChanged(int val) {
-  if (!scene) return;
-  scene->setGridSize(val);
-  if (gridLabel) gridLabel->setText(QString::number(val) + "px");
+  if (!m_pScene)
+    return;
+  m_pScene->setGridSize(val);
+  if (m_pGridLabel)
+    m_pGridLabel->setText(QString::number(val) + "px");
   updateRulers();
 }
 
 void MainWindow::onTopBarChanged(int val) {
-  if (!scene) return;
-  scene->setTopBarHeight(val);
+  if (!m_pScene)
+    return;
+  m_pScene->setTopBarHeight(val);
   updateRulers();
 }
 void MainWindow::onBotBarChanged(int val) {
-  if (!scene) return;
-  scene->setBottomBarHeight(val);
+  if (!m_pScene)
+    return;
+  m_pScene->setBottomBarHeight(val);
   updateRulers();
 }
 
 void MainWindow::toggleProperties() {
-  if (m_propDialog->isVisible()) {
-    m_propDialog->hide();
-    if (m_viewPropAct) m_viewPropAct->setChecked(false);
+  if (m_pProperties->isVisible()) {
+    m_pProperties->hide();
+    if (m_pViewPropertiesAction)
+      m_pViewPropertiesAction->setChecked(false);
   } else {
-    m_propDialog->show();
-    m_propDialog->raise();
-    m_propDialog->activateWindow();
-    if (m_viewPropAct) m_viewPropAct->setChecked(true);
-    if (scene && !scene->selectedItems().isEmpty())
-      m_propDialog->setItem(scene->selectedItems().first());
+    m_pProperties->show();
+    m_pProperties->raise();
+    m_pProperties->activateWindow();
+    if (m_pViewPropertiesAction)
+      m_pViewPropertiesAction->setChecked(true);
+    if (m_pScene && !m_pScene->selectedItems().isEmpty())
+      m_pProperties->setItem(m_pScene->selectedItems().first());
     else
-      m_propDialog->setItem(nullptr);
+      m_pProperties->setItem(nullptr);
   }
 }
 
 void MainWindow::onSelectionChanged() {
-  if (!m_propDialog->isVisible()) return;
-  if (!scene) return;
+  if (!m_pProperties->isVisible())
+    return;
+  if (!m_pScene)
+    return;
 
-  QList<QGraphicsItem*> sel = scene->selectedItems();
+  QList<QGraphicsItem*> sel = m_pScene->selectedItems();
   if (sel.isEmpty()) {
-    QTimer::singleShot(50, this, [this]() {
-      if (scene && scene->selectedItems().isEmpty())
-        m_propDialog->setItem(nullptr);
+    QTimer::singleShot(Constants::SelectionDebounceDelay, this, [this]() {
+      if (m_pScene && m_pScene->selectedItems().isEmpty())
+        m_pProperties->setItem(nullptr);
     });
   } else {
-    m_propDialog->setItem(sel.first());
-    m_propDialog->raise();
+    m_pProperties->setItem(sel.first());
+    m_pProperties->raise();
   }
 }
 
 void MainWindow::onSceneChanged(const QList<QRectF>& region) {
   Q_UNUSED(region);
-  if (scene) {
-    if (!m_isModified) setModified(true);
-    if (m_propDialog && m_propDialog->isVisible() &&
-        !scene->selectedItems().isEmpty()) {
-      m_propDialog->refreshValues();
+  if (m_pScene) {
+    if (!m_isModified)
+      setModified(true);
+    if (m_pProperties && m_pProperties->isVisible() && !m_pScene->selectedItems().isEmpty()) {
+      m_pProperties->refreshValues();
     }
   }
 }
 
 void MainWindow::addApp(QAction* action) {
-  if (!scene) return;
+  if (!m_pScene)
+    return;
   QString type = action->text();
   double w = 400, h = 300;
   if (type == "Browser") {
@@ -387,62 +385,62 @@ void MainWindow::addApp(QAction* action) {
     h = 400;
   }
 
-  ResizableAppItem* item = scene->addAppItem(type, QRectF(0, 0, w, h));
-  QRectF safe = scene->getWorkingArea();
+  ResizableAppItem* item = m_pScene->addAppItem(type, QRectF(0, 0, w, h));
+  QRectF safe = m_pScene->getWorkingArea();
   int startX = safe.left() + 20;
   int startY = safe.top() + 20;
-  if (scene->isGridEnabled()) {
-    startX = std::round(startX / (double)scene->gridSize()) * scene->gridSize();
-    startY = std::round(startY / (double)scene->gridSize()) * scene->gridSize();
+  if (m_pScene->isGridEnabled()) {
+    startX = std::round(startX / (double)m_pScene->gridSize()) * m_pScene->gridSize();
+    startY = std::round(startY / (double)m_pScene->gridSize()) * m_pScene->gridSize();
   }
   item->setPos(startX, startY);
 }
 
 void MainWindow::addZone() {
-  if (!scene) return;
+  if (!m_pScene)
+    return;
   ZoneItem* zone = new ZoneItem(QRectF(0, 0, 400, 400));
-  QRectF safe = scene->getWorkingArea();
+  QRectF safe = m_pScene->getWorkingArea();
   int startX = safe.left() + 50;
   int startY = safe.top() + 50;
   zone->setPos(startX, startY);
-  scene->addItem(zone);
+  m_pScene->addItem(zone);
 
-  statusBar()->showMessage("Zone added.", 3000);
+  statusBar()->showMessage("Zone added.", Constants::StatusMessageDuration);
 }
 
 void MainWindow::removeWindow() {
-  if (!scene) return;
-  QList<QGraphicsItem*> selected = scene->selectedItems();
+  if (!m_pScene)
+    return;
+  QList<QGraphicsItem*> selected = m_pScene->selectedItems();
 
-  if (selected.isEmpty()) return;
+  if (selected.isEmpty())
+    return;
 
   for (auto item : selected) {
-    if (dynamic_cast<ResizableAppItem*>(item) ||
-        dynamic_cast<ZoneItem*>(item) || dynamic_cast<GuideLineItem*>(item)) {
-      scene->removeItem(item);
+    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<GuideLineItem*>(item)) {
+      m_pScene->removeItem(item);
       delete item;
     }
   }
 }
 
 void MainWindow::groupItems() {
-  if (!scene) return;
-  QList<QGraphicsItem*> selected = scene->selectedItems();
+  if (!m_pScene)
+    return;
+  QList<QGraphicsItem*> selected = m_pScene->selectedItems();
 
   QList<QGraphicsItem*> itemsToGroup;
   QList<SnappingItemGroup*> groupsToMerge;
 
-  // Filter selection into Groups and Loose Items
   for (QGraphicsItem* item : selected) {
     if (SnappingItemGroup* grp = dynamic_cast<SnappingItemGroup*>(item)) {
       groupsToMerge.append(grp);
-    } else if (dynamic_cast<ResizableAppItem*>(item) ||
-               dynamic_cast<ZoneItem*>(item)) {
+    } else if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item)) {
       itemsToGroup.append(item);
     }
   }
 
-  // Case 1: Add items to a single existing group
   if (groupsToMerge.size() == 1 && !itemsToGroup.isEmpty()) {
     SnappingItemGroup* existingGroup = groupsToMerge.first();
     for (QGraphicsItem* item : itemsToGroup) {
@@ -450,54 +448,55 @@ void MainWindow::groupItems() {
       existingGroup->addToGroup(item);
     }
     existingGroup->update();
-    statusBar()->showMessage("Added item(s) to existing group.", 2000);
+    statusBar()->showMessage("Added item(s) to existing group.", Constants::StatusMessageDuration);
     return;
   }
 
-  // Case 2: Merge multiple groups (and loose items) into ONE new group
   if (groupsToMerge.size() > 1) {
-    // Dissolve existing groups first
     for (SnappingItemGroup* grp : groupsToMerge) {
       QList<QGraphicsItem*> children = grp->childItems();
-      scene->destroyItemGroup(grp);   // This moves children back to scene
-      itemsToGroup.append(children);  // Add them to our collection list
+      m_pScene->destroyItemGroup(grp);
+      itemsToGroup.append(children);
     }
   }
 
-  // Case 3: Create new group from collected items
   if (itemsToGroup.size() >= 2) {
-    SnappingItemGroup* group = new SnappingItemGroup(scene);
+    SnappingItemGroup* group = new SnappingItemGroup(m_pScene);
     for (QGraphicsItem* item : itemsToGroup) {
       item->setSelected(false);
       group->addToGroup(item);
     }
-    scene->addItem(group);
+    m_pScene->addItem(group);
     group->setSelected(true);
-    statusBar()->showMessage("Items grouped.", 2000);
+    statusBar()->showMessage("Items grouped.", Constants::StatusMessageDuration);
   } else {
-    statusBar()->showMessage("Select at least 2 items to group.", 2000);
+    statusBar()->showMessage("Select at least 2 items to group.", Constants::StatusMessageDuration);
   }
 }
 
 void MainWindow::ungroupItems() {
-  if (!scene) return;
-  QList<QGraphicsItem*> selected = scene->selectedItems();
-  if (selected.isEmpty()) return;
+  if (!m_pScene)
+    return;
+  QList<QGraphicsItem*> selected = m_pScene->selectedItems();
+  if (selected.isEmpty())
+    return;
 
   bool any = false;
   for (auto item : selected) {
     if (SnappingItemGroup* group = dynamic_cast<SnappingItemGroup*>(item)) {
-      scene->destroyItemGroup(group);
+      m_pScene->destroyItemGroup(group);
       any = true;
     }
   }
 
-  if (any) statusBar()->showMessage("Ungrouped items.", 2000);
+  if (any)
+    statusBar()->showMessage("Ungrouped items.", Constants::StatusMessageDuration);
 }
 
 void MainWindow::toggleLock() {
-  if (!scene) return;
-  QList<QGraphicsItem*> selected = scene->selectedItems();
+  if (!m_pScene)
+    return;
+  QList<QGraphicsItem*> selected = m_pScene->selectedItems();
   for (auto item : selected) {
     if (ResizableAppItem* app = dynamic_cast<ResizableAppItem*>(item)) {
       app->setLocked(!app->isLocked());
@@ -506,14 +505,16 @@ void MainWindow::toggleLock() {
 }
 
 void MainWindow::setWallpaper() {
-  if (!scene) return;
-  QString fileName = QFileDialog::getOpenFileName(
-      this, "Select Wallpaper", "", "Images (*.png *.jpg *.jpeg *.bmp)");
-  if (fileName.isEmpty()) return;
+  if (!m_pScene)
+    return;
+  QString fileName = QFileDialog::getOpenFileName(this, "Select Wallpaper", "", "Images (*.png *.jpg *.jpeg *.bmp)");
+  if (fileName.isEmpty())
+    return;
   QPixmap pix(fileName);
-  if (pix.isNull()) return;
-  scene->setWallpaper(pix);
-  statusBar()->showMessage("Wallpaper loaded.", 3000);
+  if (pix.isNull())
+    return;
+  m_pScene->setWallpaper(pix);
+  statusBar()->showMessage("Wallpaper loaded.", Constants::StatusMessageDuration);
 }
 
 QString MainWindow::getTemplateXml(const QString& name) {
@@ -526,120 +527,141 @@ QString MainWindow::getTemplateXml(const QString& name) {
 }
 
 void MainWindow::applyTemplate(QAction* action) {
-  if (!scene) return;
-  if (!maybeSave()) return;
+  if (!m_pScene)
+    return;
+  if (!maybeSave())
+    return;
 
   QString presetName = action->text();
   QString xmlContent = getTemplateXml(presetName);
-  if (!xmlContent.isEmpty() &&
-      LayoutSerializer::loadFromXml(scene, xmlContent)) {
+  if (!xmlContent.isEmpty() && LayoutSerializer::loadFromXml(m_pScene, xmlContent)) {
     setModified(false);
-    statusBar()->showMessage("Applied template: " + presetName, 3000);
+    statusBar()->showMessage("Applied template: " + presetName, Constants::StatusMessageDuration);
   }
 }
 
 bool MainWindow::saveLayout() {
-  if (!scene) return false;
-  QString fileName = QFileDialog::getSaveFileName(this, "Save Layout", "",
-                                                  "XML Files (*.xml)");
-  if (fileName.isEmpty()) return false;
+  if (!m_pScene)
+    return false;
+  QString fileName = QFileDialog::getSaveFileName(this, "Save Layout", "", "XML Files (*.xml)");
+  if (fileName.isEmpty())
+    return false;
 
-  if (LayoutSerializer::save(scene, fileName)) {
+  if (LayoutSerializer::save(m_pScene, fileName)) {
     setModified(false);
-    statusBar()->showMessage("Layout saved.", 3000);
+    statusBar()->showMessage("Layout saved.", Constants::StatusMessageDuration);
     return true;
   } else {
-    statusBar()->showMessage("Failed to save layout.", 3000);
+    statusBar()->showMessage("Failed to save layout.", Constants::StatusMessageDuration);
     return false;
   }
 }
 
 void MainWindow::loadLayout() {
-  if (!maybeSave()) return;
+  if (!maybeSave())
+    return;
 
-  QString fileName = QFileDialog::getOpenFileName(this, "Load Layout", "",
-                                                  "XML Files (*.xml)");
-  if (fileName.isEmpty()) return;
+  QString fileName = QFileDialog::getOpenFileName(this, "Load Layout", "", "XML Files (*.xml)");
+  if (fileName.isEmpty())
+    return;
 
-  if (!scene) {
-    scene = new LayoutScene(0, 0, 1920, 1080, this);
-    scene->setItemIndexMethod(QGraphicsScene::NoIndex);
-    view->setScene(scene);
-    connect(scene, &QGraphicsScene::selectionChanged, this,
-            &MainWindow::onSelectionChanged);
-    connect(scene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
+  if (!m_pScene) {
+    m_pScene = new LayoutScene(0, 0, 1920, 1080, this);
+    m_pScene->setItemIndexMethod(QGraphicsScene::NoIndex);
+    m_pView->setScene(m_pScene);
+    connect(m_pScene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
+    connect(m_pScene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
     updateInterfaceState();
   }
 
   connectSceneSignals();
 
-  if (LayoutSerializer::load(scene, fileName)) {
+  if (LayoutSerializer::load(m_pScene, fileName)) {
     setModified(false);
-    statusBar()->showMessage("Layout loaded from file.", 3000);
+    statusBar()->showMessage("Layout loaded from file.", Constants::StatusMessageDuration);
 
     // Sync UI with loaded scene
-    if (m_topBarSpin) {
-      m_topBarSpin->blockSignals(true);
-      m_topBarSpin->setValue(scene->topBarHeight());
-      m_topBarSpin->blockSignals(false);
+    if (m_pTopBarSpin) {
+      m_pTopBarSpin->blockSignals(true);
+      m_pTopBarSpin->setValue(m_pScene->topBarHeight());
+      m_pTopBarSpin->blockSignals(false);
     }
-    if (m_botBarSpin) {
-      m_botBarSpin->blockSignals(true);
-      m_botBarSpin->setValue(scene->bottomBarHeight());
-      m_botBarSpin->blockSignals(false);
+    if (m_pBotBarSpin) {
+      m_pBotBarSpin->blockSignals(true);
+      m_pBotBarSpin->setValue(m_pScene->bottomBarHeight());
+      m_pBotBarSpin->blockSignals(false);
     }
   } else {
-    statusBar()->showMessage("Failed to load layout.", 3000);
+    statusBar()->showMessage("Failed to load layout.", Constants::StatusMessageDuration);
   }
+}
+
+void MainWindow::alignLeft() {
+  if (m_pScene)
+    m_pScene->alignSelectionLeft();
+}
+void MainWindow::alignRight() {
+  if (m_pScene)
+    m_pScene->alignSelectionRight();
+}
+void MainWindow::alignTop() {
+  if (m_pScene)
+    m_pScene->alignSelectionTop();
+}
+void MainWindow::alignBottom() {
+  if (m_pScene)
+    m_pScene->alignSelectionBottom();
+}
+void MainWindow::alignCenterH() {
+  if (m_pScene)
+    m_pScene->alignSelectionCenterH();
+}
+void MainWindow::alignCenterV() {
+  if (m_pScene)
+    m_pScene->alignSelectionCenterV();
+}
+void MainWindow::distributeH() {
+  if (m_pScene)
+    m_pScene->distributeSelectionH();
+}
+void MainWindow::distributeV() {
+  if (m_pScene)
+    m_pScene->distributeSelectionV();
 }
 
 void MainWindow::createMenuBar() {
   QMenu* viewMenu = menuBar()->addMenu("View");
 
-  m_viewPropAct = viewMenu->addAction("Properties Window");
-  m_viewPropAct->setCheckable(true);
-  m_viewPropAct->setShortcut(QKeySequence("F2"));
-  connect(m_viewPropAct, &QAction::triggered, this,
-          &MainWindow::toggleProperties);
+  m_pViewPropertiesAction = viewMenu->addAction("Properties Window");
+  m_pViewPropertiesAction->setCheckable(true);
+  m_pViewPropertiesAction->setShortcut(QKeySequence("F2"));
+  connect(m_pViewPropertiesAction, &QAction::triggered, this, &MainWindow::toggleProperties);
 
   QAction* settAct = viewMenu->addAction("Settings...");
   connect(settAct, &QAction::triggered, this, &MainWindow::openSettings);
 }
 
 void MainWindow::createToolbar() {
-  // Safe cleanup of old toolbar
-  if (m_toolbar) {
-    removeToolBar(m_toolbar);
-    delete m_toolbar;
-    m_toolbar = nullptr;
+  if (m_pToolbar) {
+    removeToolBar(m_pToolbar);
+    delete m_pToolbar;
+    m_pToolbar = nullptr;
   }
 
   OfficeToolbar* ribbon = new OfficeToolbar(this);
-  m_toolbar = addToolBar("Ribbon");
-  m_toolbar->setMovable(false);
-  m_toolbar->addWidget(ribbon);
+  m_pToolbar = addToolBar("Ribbon");
+  m_pToolbar->setMovable(false);
+  m_pToolbar->addWidget(ribbon);
 
-  QString controlStyle = R"(
-      QMenu {
-          background-color: #ffffff;
-          border: 1px solid #cccccc;
-          color: #333333;
-          padding: 2px;
-      }
-      QMenu::item {
-          padding: 5px 25px 5px 25px;
-          background: transparent;
-          color: #333333;
-      }
-      QMenu::item:selected {
-          background-color: #3399ff;
-          color: #ffffff;
-      }
-  )";
+  QString controlStyle = QString(Constants::Style::Menu)
+                             .arg(QColor(Constants::Color::RibbonBg).name())
+                             .arg(QColor(Constants::Color::RibbonBorder).name())
+                             .arg(QColor(Constants::Color::RibbonText).name())
+                             .arg(QColor(Constants::Color::RibbonHighlight).name())
+                             .arg(QColor(Constants::Color::RibbonHighlightText).name());
 
   // --- SECTION: FILE ---
-  RibbonSection* fileSec =
-      ribbon->addSection("File", QIcon(":/icons/section-file.svg"));
+  RibbonSection* fileSec = ribbon->addSection("File", QIcon(":/icons/section-file.svg"));
 
   QAction* newAct = new QAction(QIcon(":/icons/add.svg"), "New", this);
   newAct->setShortcut(QKeySequence::New);
@@ -662,12 +684,9 @@ void MainWindow::createToolbar() {
   fileSec->addLargeButton(new RibbonButton(closeAct, RibbonButton::Large));
 
   // --- SECTION: INSERT ---
-  m_secInsert =
-      ribbon->addSection("Insert", QIcon(":/icons/section-insert.svg"));
+  m_pSectionInsert = ribbon->addSection("Insert", QIcon(":/icons/section-insert.svg"));
 
-  QToolButton* addBtn =
-      new RibbonButton(new QAction(QIcon(":/icons/add.svg"), "Add App", this),
-                       RibbonButton::Large);
+  QToolButton* addBtn = new RibbonButton(new QAction(QIcon(":/icons/add.svg"), "Add App", this), RibbonButton::Large);
   addBtn->setPopupMode(QToolButton::InstantPopup);
   QMenu* addMenu = new QMenu(addBtn);
   addMenu->addAction("Browser");
@@ -677,24 +696,22 @@ void MainWindow::createToolbar() {
   addMenu->setStyleSheet(controlStyle);
   addBtn->setMenu(addMenu);
   connect(addMenu, &QMenu::triggered, this, &MainWindow::addApp);
-  m_secInsert->addLargeButton((RibbonButton*)addBtn);
+  m_pSectionInsert->addLargeButton((RibbonButton*)addBtn);
 
   QAction* zoneAct = new QAction(QIcon(":/icons/zone.svg"), "Zone", this);
   connect(zoneAct, &QAction::triggered, this, &MainWindow::addZone);
-  m_secInsert->addLargeButton(new RibbonButton(zoneAct, RibbonButton::Large));
+  m_pSectionInsert->addLargeButton(new RibbonButton(zoneAct, RibbonButton::Large));
 
   QAction* rmAct = new QAction(QIcon(":/icons/remove.svg"), "Delete", this);
   rmAct->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
   connect(rmAct, &QAction::triggered, this, &MainWindow::removeWindow);
-  m_secInsert->addLargeButton(new RibbonButton(rmAct, RibbonButton::Large));
+  m_pSectionInsert->addLargeButton(new RibbonButton(rmAct, RibbonButton::Large));
 
   QAction* wallAct = new QAction(QIcon(":/icons/image.svg"), "Wallpaper", this);
   connect(wallAct, &QAction::triggered, this, &MainWindow::setWallpaper);
-  m_secInsert->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 3);
+  m_pSectionInsert->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 3);
 
-  QToolButton* tempBtn = new RibbonButton(
-      new QAction(QIcon(":/icons/template.svg"), "Templates", this),
-      RibbonButton::Small);
+  QToolButton* tempBtn = new RibbonButton(new QAction(QIcon(":/icons/template.svg"), "Templates", this), RibbonButton::Small);
   tempBtn->setPopupMode(QToolButton::InstantPopup);
   QMenu* tempMenu = new QMenu(tempBtn);
   tempMenu->addAction("Coding");
@@ -702,63 +719,56 @@ void MainWindow::createToolbar() {
   tempMenu->setStyleSheet(controlStyle);
   tempBtn->setMenu(tempMenu);
   connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
-  m_secInsert->addWidget(tempBtn, 1, 3);
+  m_pSectionInsert->addWidget(tempBtn, 1, 3);
 
   // --- SECTION: ARRANGE ---
-  m_secArrange =
-      ribbon->addSection("Arrange", QIcon(":/icons/section-arrange.svg"));
+  m_pSectionArrange = ribbon->addSection("Arrange", QIcon(":/icons/section-arrange.svg"));
 
   QAction* grpAct = new QAction(QIcon(":/icons/group.svg"), "Group", this);
   grpAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
   connect(grpAct, &QAction::triggered, this, &MainWindow::groupItems);
-  m_secArrange->addWidget(new RibbonButton(grpAct, RibbonButton::Small), 0, 0);
+  m_pSectionArrange->addWidget(new RibbonButton(grpAct, RibbonButton::Small), 0, 0);
 
-  QAction* ungrpAct =
-      new QAction(QIcon(":/icons/ungroup.svg"), "Ungroup", this);
+  QAction* ungrpAct = new QAction(QIcon(":/icons/ungroup.svg"), "Ungroup", this);
   ungrpAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
   connect(ungrpAct, &QAction::triggered, this, &MainWindow::ungroupItems);
-  m_secArrange->addWidget(new RibbonButton(ungrpAct, RibbonButton::Small), 1,
-                          0);
+  m_pSectionArrange->addWidget(new RibbonButton(ungrpAct, RibbonButton::Small), 1, 0);
 
   QAction* lockAct = new QAction(QIcon(":/icons/lock.svg"), "Lock", this);
   lockAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
   connect(lockAct, &QAction::triggered, this, &MainWindow::toggleLock);
-  m_secArrange->addWidget(new RibbonButton(lockAct, RibbonButton::Small), 2, 0);
+  m_pSectionArrange->addWidget(new RibbonButton(lockAct, RibbonButton::Small), 2, 0);
 
   // --- SECTION: ALIGNMENT ---
-  m_secAlign =
-      ribbon->addSection("Alignment", QIcon(":/icons/section-alignment.svg"));
+  m_pSectionAlign = ribbon->addSection("Alignment", QIcon(":/icons/section-alignment.svg"));
 
   QAction* al = new QAction(QIcon(":/icons/align-left.svg"), "Left", this);
-  connect(al, &QAction::triggered, scene, &LayoutScene::alignSelectionLeft);
-  m_secAlign->addWidget(new RibbonButton(al, RibbonButton::Small), 0, 0);
+  connect(al, &QAction::triggered, this, &MainWindow::alignLeft);
+  m_pSectionAlign->addWidget(new RibbonButton(al, RibbonButton::Small), 0, 0);
 
-  QAction* ac =
-      new QAction(QIcon(":/icons/align-center-h.svg"), "Center", this);
-  connect(ac, &QAction::triggered, scene, &LayoutScene::alignSelectionCenterH);
-  m_secAlign->addWidget(new RibbonButton(ac, RibbonButton::Small), 1, 0);
+  QAction* ac = new QAction(QIcon(":/icons/align-center-h.svg"), "Center", this);
+  connect(ac, &QAction::triggered, this, &MainWindow::alignCenterH);
+  m_pSectionAlign->addWidget(new RibbonButton(ac, RibbonButton::Small), 1, 0);
 
   QAction* ar = new QAction(QIcon(":/icons/align-right.svg"), "Right", this);
-  connect(ar, &QAction::triggered, scene, &LayoutScene::alignSelectionRight);
-  m_secAlign->addWidget(new RibbonButton(ar, RibbonButton::Small), 2, 0);
+  connect(ar, &QAction::triggered, this, &MainWindow::alignRight);
+  m_pSectionAlign->addWidget(new RibbonButton(ar, RibbonButton::Small), 2, 0);
 
   QAction* at = new QAction(QIcon(":/icons/align-top.svg"), "Top", this);
-  connect(at, &QAction::triggered, scene, &LayoutScene::alignSelectionTop);
-  m_secAlign->addWidget(new RibbonButton(at, RibbonButton::Small), 0, 1);
+  connect(at, &QAction::triggered, this, &MainWindow::alignTop);
+  m_pSectionAlign->addWidget(new RibbonButton(at, RibbonButton::Small), 0, 1);
 
-  QAction* am =
-      new QAction(QIcon(":/icons/align-center-v.svg"), "Middle", this);
-  connect(am, &QAction::triggered, scene, &LayoutScene::alignSelectionCenterV);
-  m_secAlign->addWidget(new RibbonButton(am, RibbonButton::Small), 1, 1);
+  QAction* am = new QAction(QIcon(":/icons/align-center-v.svg"), "Middle", this);
+  connect(am, &QAction::triggered, this, &MainWindow::alignCenterV);
+  m_pSectionAlign->addWidget(new RibbonButton(am, RibbonButton::Small), 1, 1);
 
   QAction* ab = new QAction(QIcon(":/icons/align-bottom.svg"), "Bottom", this);
-  connect(ab, &QAction::triggered, scene, &LayoutScene::alignSelectionBottom);
-  m_secAlign->addWidget(new RibbonButton(ab, RibbonButton::Small), 2, 1);
+  connect(ab, &QAction::triggered, this, &MainWindow::alignBottom);
+  m_pSectionAlign->addWidget(new RibbonButton(ab, RibbonButton::Small), 2, 1);
 
   // --- SECTION: VIEW ---
-  m_secView = ribbon->addSection("View", QIcon(":/icons/section-view.svg"));
+  m_pSectionView = ribbon->addSection("View", QIcon(":/icons/section-view.svg"));
 
-  // Row 1: Grid controls
   QWidget* gridContainer = new QWidget();
   gridContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
   QHBoxLayout* gridLayout = new QHBoxLayout(gridContainer);
@@ -771,60 +781,46 @@ void MainWindow::createToolbar() {
   RibbonButton* gridBtn = new RibbonButton(gridAct, RibbonButton::Small);
   gridLayout->addWidget(gridBtn);
 
-  gridSlider = new QSlider(Qt::Horizontal);
-  gridSlider->setRange(10, 200);
-  gridSlider->setValue(50);
-  gridSlider->setFixedWidth(80);
-  gridSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-  gridSlider->setEnabled(false);
-  connect(gridSlider, &QSlider::valueChanged, this,
-          &MainWindow::onGridSizeChanged);
-  gridLayout->addWidget(gridSlider);
+  m_pGridSlider = new QSlider(Qt::Horizontal);
+  m_pGridSlider->setRange(10, 200);
+  m_pGridSlider->setValue(50);
+  m_pGridSlider->setFixedWidth(80);
+  m_pGridSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+  m_pGridSlider->setEnabled(false);
 
-  gridLabel = new QLabel("50px");
-  gridLayout->addWidget(gridLabel);
+  connect(m_pGridSlider, &QSlider::valueChanged, this, &MainWindow::onGridSizeChanged);
+  gridLayout->addWidget(m_pGridSlider);
 
-  m_secView->addWidget(gridContainer, 0, 0);
+  m_pGridLabel = new QLabel("50px");
+  gridLayout->addWidget(m_pGridLabel);
 
-  // Row 2: Bar Sizes
+  m_pSectionView->addWidget(gridContainer, 0, 0);
+
   QString spinStyle =
-      "QSpinBox { background-color: #ffffff; color: #333333; border: 1px solid "
-      "#cccccc; padding: 2px; selection-background-color: #3399ff; }"
-      "QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: "
-      "top right; width: 16px; border-left: 1px solid #cccccc; border-bottom: "
-      "1px solid #cccccc; background: #f5f5f5; }"
-      "QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: "
-      "bottom right; width: 16px; border-left: 1px solid #cccccc; border-top: "
-      "0px solid #cccccc; background: #f5f5f5; }"
-      "QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: "
-      "#e0e0e0; }"
-      "QSpinBox::up-button:pressed, QSpinBox::down-button:pressed { "
-      "background: #d0d0d0; }"
-      "QSpinBox::up-arrow { width: 10px; height: 10px; image: "
-      "url(:/resources/spin-up-dark.svg); }"
-      "QSpinBox::down-arrow { width: 10px; height: 10px; image: "
-      "url(:/resources/spin-down-dark.svg); }"
-      "QSpinBox:disabled { color: #aaaaaa; background-color: #f0f0f0; }";
+      QString(Constants::Style::SpinBox)
+          .arg(QColor(Constants::Color::SpinBoxLightBg).name(), QColor(Constants::Color::SpinBoxLightText).name(),
+               QColor(Constants::Color::SpinBoxLightBorder).name(), QColor(Constants::Color::SpinBoxLightSelection).name(),
+               QColor(Constants::Color::SpinBoxLightButton).name(), QColor(Constants::Color::SpinBoxLightHover).name(),
+               QColor(Constants::Color::SpinBoxLightPressed).name(), Constants::Color::IconSpinUpDark, Constants::Color::IconSpinDownDark,
+               QColor(Constants::Color::SpinBoxLightDisabledText).name(), QColor(Constants::Color::SpinBoxLightDisabledBg).name());
 
-  m_topBarSpin = new QSpinBox();  // Use member
-  m_topBarSpin->setRange(0, 200);
-  m_topBarSpin->setValue(30);
-  m_topBarSpin->setSuffix(" px");
-  m_topBarSpin->setFixedWidth(60);
-  m_topBarSpin->setStyleSheet(spinStyle);
-  m_topBarSpin->setKeyboardTracking(false);
-  connect(m_topBarSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
-          &MainWindow::onTopBarChanged);
+  m_pTopBarSpin = new QSpinBox();
+  m_pTopBarSpin->setRange(0, 200);
+  m_pTopBarSpin->setValue(30);
+  m_pTopBarSpin->setSuffix(" px");
+  m_pTopBarSpin->setFixedWidth(60);
+  m_pTopBarSpin->setStyleSheet(spinStyle);
+  m_pTopBarSpin->setKeyboardTracking(false);
+  connect(m_pTopBarSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::onTopBarChanged);
 
-  m_botBarSpin = new QSpinBox();  // Use member
-  m_botBarSpin->setRange(0, 200);
-  m_botBarSpin->setValue(40);
-  m_botBarSpin->setSuffix(" px");
-  m_botBarSpin->setFixedWidth(60);
-  m_botBarSpin->setStyleSheet(spinStyle);
-  m_botBarSpin->setKeyboardTracking(false);
-  connect(m_botBarSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
-          &MainWindow::onBotBarChanged);
+  m_pBotBarSpin = new QSpinBox();
+  m_pBotBarSpin->setRange(0, 200);
+  m_pBotBarSpin->setValue(40);
+  m_pBotBarSpin->setSuffix(" px");
+  m_pBotBarSpin->setFixedWidth(60);
+  m_pBotBarSpin->setStyleSheet(spinStyle);
+  m_pBotBarSpin->setKeyboardTracking(false);
+  connect(m_pBotBarSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::onBotBarChanged);
 
   QWidget* barsContainer = new QWidget();
   barsContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -833,11 +829,11 @@ void MainWindow::createToolbar() {
   barsLayout->setSpacing(5);
 
   barsLayout->addWidget(new QLabel("Top:"));
-  barsLayout->addWidget(m_topBarSpin);
+  barsLayout->addWidget(m_pTopBarSpin);
   barsLayout->addWidget(new QLabel("Bot:"));
-  barsLayout->addWidget(m_botBarSpin);
+  barsLayout->addWidget(m_pBotBarSpin);
 
-  m_secView->addWidget(barsContainer, 1, 0);
+  m_pSectionView->addWidget(barsContainer, 1, 0);
 
   ribbon->addSpacer();
 }

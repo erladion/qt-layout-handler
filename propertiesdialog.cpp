@@ -1,5 +1,4 @@
 #include "propertiesdialog.h"
-
 #include <QFormLayout>
 #include <QGraphicsItem>
 #include <QLabel>
@@ -8,51 +7,33 @@
 #include <QSpinBox>
 #include <QStyleOption>
 #include <QVBoxLayout>
-
-#include "guidelineitem.h"  // NEW
+#include "constants.h"
+#include "guidelineitem.h"
 #include "resizableappitem.h"
 #include "snappingitemgroup.h"
 #include "zoneitem.h"
 
-PropertiesDialog::PropertiesDialog(QWidget* parent)
-    : QWidget(parent),
-      m_currentItem(nullptr),
-      m_blockSignals(false),
-      m_isDragging(false) {
-  setFixedSize(200, 220);
+PropertiesDialog::PropertiesDialog(QWidget* parent) : QWidget(parent), m_currentItem(nullptr), m_blockSignals(false), m_isDragging(false) {
+  setFixedSize(Constants::PropertiesDialogWidth, Constants::PropertiesDialogHeight);
 
   QPalette pal = palette();
-  pal.setColor(QPalette::WindowText, QColor("#e0e0e0"));
-  pal.setColor(QPalette::Text, QColor("#ffffff"));
-  pal.setColor(QPalette::ButtonText, QColor("#e0e0e0"));
-  pal.setColor(QPalette::Base, QColor("#2b2b2b"));
+  // FIX: Convert QRgb to QColor for Palette
+  pal.setColor(QPalette::WindowText, QColor(Constants::Color::PropText));
+  pal.setColor(QPalette::Text, QColor(Constants::Color::PropInputText));
+  pal.setColor(QPalette::ButtonText, QColor(Constants::Color::PropText));
+  pal.setColor(QPalette::Base, QColor(Constants::Color::PropInputBase));
   setPalette(pal);
 
-  setStyleSheet(
-      "QLabel { color: #e0e0e0; }"
-      "QSpinBox { background-color: #2b2b2b; color: #ffffff; border: 1px solid "
-      "#505050; padding: 2px; selection-background-color: #505050; }"
+  // FIX: Convert QRgb to Hex String (.name()) for Stylesheet args
+  QString spinStyle = QString(Constants::Style::SpinBox)
+                          .arg(QColor(Constants::Color::PropInputBase).name(), QColor(Constants::Color::PropInputText).name(),
+                               QColor(Constants::Color::PropBorder).name(), QColor(Constants::Color::SpinBoxDarkSelection).name(),
+                               QColor(Constants::Color::PropBackground).name(), QColor(Constants::Color::SpinBoxDarkHover).name(),
+                               QColor(Constants::Color::PropHeaderBg).name(), Constants::Color::IconSpinUpLight, Constants::Color::IconSpinDownLight,
+                               QColor(Constants::Color::SpinBoxDarkDisabledText).name(), QColor(Constants::Color::PropHeaderBg).name());
 
-      "QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: "
-      "top right; width: 16px; border-left: 1px solid #505050; border-bottom: "
-      "1px solid #505050; background: #353535; }"
-      "QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: "
-      "bottom right; width: 16px; border-left: 1px solid #505050; border-top: "
-      "0px solid #505050; background: #353535; }"
-
-      "QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: "
-      "#454545; }"
-      "QSpinBox::up-button:pressed, QSpinBox::down-button:pressed { "
-      "background: #252525; }"
-
-      "QSpinBox::up-arrow { width: 10px; height: 10px; image: "
-      "url(:/resources/spin-up.svg); }"
-      "QSpinBox::down-arrow { width: 10px; height: 10px; image: "
-      "url(:/resources/spin-down.svg); }"
-
-      "QSpinBox:disabled { color: #808080; background-color: #252525; }"
-      "QSpinBox::up-arrow:disabled, QSpinBox::down-arrow:disabled { opacity: "
-      "0.3; }");
+  QString compositeStyle = QString(Constants::Style::PropLabel).arg(QColor(Constants::Color::PropText).name()) + spinStyle;
+  setStyleSheet(compositeStyle);
 
   QVBoxLayout* mainLayout = new QVBoxLayout(this);
   mainLayout->setContentsMargins(10, 10, 10, 10);
@@ -64,9 +45,12 @@ PropertiesDialog::PropertiesDialog(QWidget* parent)
   f.setBold(true);
   f.setPointSize(10);
   typeLabel->setFont(f);
-  typeLabel->setStyleSheet(
-      "background-color: #252525; border-radius: 2px; padding: 4px; color: "
-      "#e0e0e0; border: 1px solid #404040;");
+
+  // FIX: Convert QRgb to Hex String
+  typeLabel->setStyleSheet(QString("background-color: %1; border-radius: 2px; padding: 4px; color: %2; border: 1px solid %3;")
+                               .arg(QColor(Constants::Color::PropHeaderBg).name())
+                               .arg(QColor(Constants::Color::PropText).name())
+                               .arg("transparent"));
   mainLayout->addWidget(typeLabel);
 
   QFormLayout* form = new QFormLayout();
@@ -95,14 +79,10 @@ PropertiesDialog::PropertiesDialog(QWidget* parent)
   mainLayout->addLayout(form);
   mainLayout->addStretch();
 
-  connect(xSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
-          &PropertiesDialog::onValueChanged);
-  connect(ySpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
-          &PropertiesDialog::onValueChanged);
-  connect(wSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
-          &PropertiesDialog::onValueChanged);
-  connect(hSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
-          &PropertiesDialog::onValueChanged);
+  connect(xSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(ySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(wSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(hSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
 }
 
 void PropertiesDialog::setItem(QGraphicsItem* item) {
@@ -111,7 +91,6 @@ void PropertiesDialog::setItem(QGraphicsItem* item) {
   if (!item) {
     typeLabel->setText("No Selection");
 
-    // Hide values if no selection
     m_blockSignals = true;
     auto clearSpin = [](QSpinBox* spin) {
       spin->setEnabled(false);
@@ -134,7 +113,6 @@ void PropertiesDialog::setItem(QGraphicsItem* item) {
   } else if (dynamic_cast<SnappingItemGroup*>(item)) {
     typeLabel->setText("Group");
   } else if (auto guide = dynamic_cast<GuideLineItem*>(item)) {
-    // Handle Guides
     if (guide->orientation() == GuideLineItem::Horizontal)
       typeLabel->setText("Horizontal Guide");
     else
@@ -147,18 +125,18 @@ void PropertiesDialog::setItem(QGraphicsItem* item) {
 }
 
 void PropertiesDialog::refreshValues() {
-  if (!m_currentItem) return;
+  if (!m_currentItem)
+    return;
 
   m_blockSignals = true;
 
-  // Helper to update state and value
   auto updateField = [&](QSpinBox* spin, bool enabled, int value) {
     spin->setEnabled(enabled);
     if (enabled) {
       spin->setSpecialValueText("");
-      if (!spin->hasFocus()) spin->setValue(value);
+      if (!spin->hasFocus())
+        spin->setValue(value);
     } else {
-      // Show empty if disabled/not applicable
       spin->setSpecialValueText(" ");
       spin->setValue(spin->minimum());
     }
@@ -166,13 +144,11 @@ void PropertiesDialog::refreshValues() {
 
   if (auto guide = dynamic_cast<GuideLineItem*>(m_currentItem)) {
     if (guide->orientation() == GuideLineItem::Horizontal) {
-      // Horizontal guide (y-axis position)
       updateField(xSpin, false, 0);
       updateField(ySpin, true, guide->pos().y());
       updateField(wSpin, false, 0);
       updateField(hSpin, false, 0);
     } else {
-      // Vertical guide (x-axis position)
       updateField(xSpin, true, guide->pos().x());
       updateField(ySpin, false, 0);
       updateField(wSpin, false, 0);
@@ -201,9 +177,9 @@ void PropertiesDialog::refreshValues() {
 }
 
 void PropertiesDialog::onValueChanged() {
-  if (m_blockSignals || !m_currentItem) return;
+  if (m_blockSignals || !m_currentItem)
+    return;
 
-  // Special handling for GuideLines to enforce axis lock
   if (auto guide = dynamic_cast<GuideLineItem*>(m_currentItem)) {
     if (guide->orientation() == GuideLineItem::Horizontal) {
       guide->setPos(0, ySpin->value());
@@ -215,7 +191,6 @@ void PropertiesDialog::onValueChanged() {
     return;
   }
 
-  // Normal handling for other items
   m_currentItem->setPos(xSpin->value(), ySpin->value());
 
   if (auto app = dynamic_cast<ResizableAppItem*>(m_currentItem)) {
@@ -246,17 +221,17 @@ void PropertiesDialog::mousePressEvent(QMouseEvent* event) {
 void PropertiesDialog::mouseMoveEvent(QMouseEvent* event) {
   if (m_isDragging && event->buttons() & Qt::LeftButton) {
     QPoint newPos = mapToParent(event->pos()) - m_dragOffset;
-
     if (parentWidget()) {
       QRect parentRect = parentWidget()->rect();
-      if (newPos.x() < 0) newPos.setX(0);
+      if (newPos.x() < 0)
+        newPos.setX(0);
       if (newPos.x() + width() > parentRect.width())
         newPos.setX(parentRect.width() - width());
-      if (newPos.y() < 0) newPos.setY(0);
+      if (newPos.y() < 0)
+        newPos.setY(0);
       if (newPos.y() + height() > parentRect.height())
         newPos.setY(parentRect.height() - height());
     }
-
     move(newPos);
   }
   QWidget::mouseMoveEvent(event);
@@ -271,11 +246,11 @@ void PropertiesDialog::mouseReleaseEvent(QMouseEvent* event) {
 
 void PropertiesDialog::paintEvent(QPaintEvent* event) {
   Q_UNUSED(event);
-
   QPainter p(this);
   p.setRenderHint(QPainter::Antialiasing);
 
-  p.setBrush(QColor("#353535"));
-  p.setPen(QPen(QColor("#505050"), 1));
+  // FIX: Convert QRgb to QColor for Painter
+  p.setBrush(QColor(Constants::Color::PropBackground));
+  p.setPen(QPen(QColor(Constants::Color::PropBorder), 1));
   p.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 4, 4);
 }

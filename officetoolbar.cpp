@@ -10,6 +10,7 @@
 #include <QStackedLayout>
 #include <QStyleOption>
 #include <QVBoxLayout>
+#include "constants.h"
 
 // =============================================================================
 // RibbonButton
@@ -19,11 +20,11 @@ RibbonButton::RibbonButton(QAction* action, Type type, QWidget* parent) : QToolB
   setAutoRaise(true);
   setCompactMode(false);
 
-  setStyleSheet(R"(
-        QToolButton { border: none; border-radius: 3px; padding: 4px; color: #333333; }
-        QToolButton:hover { background-color: #e0e0e0; }
-        QToolButton:pressed { background-color: #c0c0c0; }
-    )");
+  // FIX: Convert QRgb to Hex String
+  setStyleSheet(QString(Constants::Style::RibbonButton)
+                    .arg(QColor(Constants::Color::RibbonText).name())
+                    .arg(QColor(Constants::Color::RibbonHover).name())
+                    .arg(QColor(Constants::Color::RibbonPressed).name()));
 }
 
 void RibbonButton::setCompactMode(bool compact) {
@@ -53,17 +54,15 @@ RibbonSection::RibbonSection(const QString& title, const QIcon& icon, QWidget* p
     : QWidget(parent), m_title(title), m_sectionIcon(icon), m_mode(Normal), m_popupWidget(nullptr), m_gridColCount(0) {
   setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
 
-  // Root Layout: Stacked (Page 0: Expanded, Page 1: Collapsed)
   m_stackLayout = new QStackedLayout(this);
   m_stackLayout->setContentsMargins(0, 0, 0, 0);
 
-  // --- Page 0: Expanded View ---
+  // --- Expanded View ---
   m_expandedWidget = new QWidget(this);
   m_expandedLayout = new QVBoxLayout(m_expandedWidget);
   m_expandedLayout->setContentsMargins(2, 2, 2, 2);
   m_expandedLayout->setSpacing(0);
 
-  // Content container
   m_contentWidget = new QWidget(m_expandedWidget);
   m_contentGrid = new QGridLayout(m_contentWidget);
   m_contentGrid->setContentsMargins(0, 0, 0, 0);
@@ -72,7 +71,6 @@ RibbonSection::RibbonSection(const QString& title, const QIcon& icon, QWidget* p
   m_expandedLayout->addWidget(m_contentWidget);
   m_expandedLayout->addStretch();
 
-  // Title Label
   m_titleLbl = new QLabel(title, m_expandedWidget);
   m_titleLbl->setAlignment(Qt::AlignCenter);
   m_titleLbl->setStyleSheet("color: #888888; font-size: 10px; padding-top: 2px; background: transparent;");
@@ -80,7 +78,7 @@ RibbonSection::RibbonSection(const QString& title, const QIcon& icon, QWidget* p
 
   m_stackLayout->addWidget(m_expandedWidget);
 
-  // --- Page 1: Collapsed View ---
+  // --- Collapsed View ---
   m_collapsedWidget = new QWidget(this);
   QVBoxLayout* colLayout = new QVBoxLayout(m_collapsedWidget);
   colLayout->setContentsMargins(0, 0, 0, 0);
@@ -91,15 +89,16 @@ RibbonSection::RibbonSection(const QString& title, const QIcon& icon, QWidget* p
   m_collapsedBtn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
   m_collapsedBtn->setIcon(icon);
   m_collapsedBtn->setIconSize(QSize(32, 32));
-  m_collapsedBtn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);  // Centered
-  m_collapsedBtn->setStyleSheet(R"(
-        QToolButton { border: none; border-radius: 3px; padding: 4px; color: #333333; }
-        QToolButton:hover { background-color: #e0e0e0; }
-        QToolButton:pressed { background-color: #c0c0c0; }
-    )");
+  m_collapsedBtn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+  // Reuse style constant with hex strings
+  m_collapsedBtn->setStyleSheet(QString(Constants::Style::RibbonButton)
+                                    .arg(QColor(Constants::Color::RibbonText).name())
+                                    .arg(QColor(Constants::Color::RibbonHover).name())
+                                    .arg(QColor(Constants::Color::RibbonPressed).name()));
+
   connect(m_collapsedBtn, &QToolButton::clicked, this, &RibbonSection::onCollapseButtonClicked);
 
-  // Vertically center the button
   colLayout->addStretch();
   colLayout->addWidget(m_collapsedBtn, 0, Qt::AlignCenter);
   colLayout->addStretch();
@@ -115,6 +114,10 @@ RibbonSection::~RibbonSection() {
 void RibbonSection::addLargeButton(RibbonButton* btn) {
   m_contentGrid->addWidget(btn, 0, m_gridColCount, 3, 1);
   m_gridColCount++;
+
+  if (m_representativeIcon.isNull()) {
+    m_representativeIcon = btn->icon();
+  }
 }
 
 void RibbonSection::addSmallButton(RibbonButton* btn, int col) {
@@ -226,7 +229,8 @@ void RibbonSection::paintEvent(QPaintEvent* event) {
   QPainter p(this);
 
   if (m_mode != Collapsed) {
-    p.setPen(QColor("#d0d0d0"));
+    // FIX: Wrap QRgb in QColor
+    p.setPen(QColor(Constants::Color::RibbonSeparator));
     p.drawLine(width() - 1, 4, width() - 1, height() - 4);
   }
 }
@@ -260,18 +264,19 @@ void RibbonSection::setupPopup() {
   QPalette pal = m_popupWidget->palette();
   pal.setColor(QPalette::Window, Qt::white);
   m_popupWidget->setPalette(pal);
-  m_popupWidget->setStyleSheet("QWidget { border: 1px solid #c0c0c0; background-color: white; }");
+
+  // FIX: Multi-arg arg() with QColor().name()
+  m_popupWidget->setStyleSheet(
+      QString(Constants::Style::RibbonPopup).arg(QColor(Constants::Color::RibbonBorder).name(), QColor(Constants::Color::RibbonBg).name()));
 }
 
 void RibbonSection::restoreContent() {
-  // FIX: Reparent back to m_expandedWidget (Page 0), not 'this'
   if (m_contentWidget->parent() != m_expandedWidget) {
     if (m_popupWidget) {
       m_popupWidget->hide();
       m_popupWidget->layout()->removeWidget(m_contentWidget);
     }
     m_contentWidget->setParent(m_expandedWidget);
-    // Insert at index 0 of the expanded layout (above the title)
     m_expandedLayout->insertWidget(0, m_contentWidget);
   }
 }
@@ -297,11 +302,11 @@ OfficeToolbar::OfficeToolbar(QWidget* parent) : QWidget(parent) {
   m_layout->setContentsMargins(0, 0, 0, 0);
   m_layout->setSpacing(0);
   m_layout->setAlignment(Qt::AlignLeft);
-  setFixedHeight(100);
+  setFixedHeight(Constants::RibbonHeight);
 }
 
 QSize OfficeToolbar::minimumSizeHint() const {
-  return QSize(200, 100);
+  return QSize(200, Constants::RibbonHeight);
 }
 
 RibbonSection* OfficeToolbar::addSection(const QString& title, const QIcon& icon) {
@@ -326,7 +331,9 @@ void OfficeToolbar::paintEvent(QPaintEvent* event) {
   Q_UNUSED(event);
   QPainter p(this);
   p.fillRect(rect(), Qt::white);
-  p.setPen(QColor("#c0c0c0"));
+
+  // FIX: Wrap QRgb in QColor
+  p.setPen(QColor(Constants::Color::RibbonBorder));
   p.drawLine(0, height() - 1, width(), height() - 1);
 }
 

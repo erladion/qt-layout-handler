@@ -1,8 +1,7 @@
 #include "snappingutils.h"
-
 #include <QGraphicsItem>
 #include <QtMath>
-
+#include "constants.h"  // NEW
 #include "guidelineitem.h"
 #include "layoutscene.h"
 #include "resizableappitem.h"
@@ -10,40 +9,37 @@
 #include "zoneitem.h"
 
 bool SnappingUtils::isSnappableItem(QGraphicsItem* item) {
-  return (dynamic_cast<ResizableAppItem*>(item) ||
-          dynamic_cast<ZoneItem*>(item) ||
-          dynamic_cast<SnappingItemGroup*>(item));
+  return (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<SnappingItemGroup*>(item));
 }
 
 bool SnappingUtils::isClose(double value, double target) {
-  return qAbs(value - target) < SNAP_DIST;
+  return qAbs(value - target) < Constants::SnapDistance;
 }
 
 double SnappingUtils::snapToGridVal(double val, int gridSize) {
   return std::round(val / gridSize) * gridSize;
 }
 
-bool SnappingUtils::rangesOverlap(double min1, double len1, double min2,
-                                  double len2) {
+bool SnappingUtils::rangesOverlap(double min1, double len1, double min2, double len2) {
   double max1 = min1 + len1;
   double max2 = min2 + len2;
   return max1 > min2 && min1 < max2;
 }
 
-QList<QGraphicsItem*> SnappingUtils::getSnappingCandidates(
-    LayoutScene* scene, const QRectF& queryRect, QGraphicsItem* ignoreItem) {
-  QRectF searchRect =
-      queryRect.adjusted(-SNAP_DIST, -SNAP_DIST, SNAP_DIST, SNAP_DIST);
-  QList<QGraphicsItem*> candidates =
-      scene->items(searchRect, Qt::IntersectsItemBoundingRect);
+QList<QGraphicsItem*> SnappingUtils::getSnappingCandidates(LayoutScene* scene, const QRectF& queryRect, QGraphicsItem* ignoreItem) {
+  QRectF searchRect = queryRect.adjusted(-Constants::SnapDistance, -Constants::SnapDistance, Constants::SnapDistance, Constants::SnapDistance);
+  QList<QGraphicsItem*> candidates = scene->items(searchRect, Qt::IntersectsItemBoundingRect);
 
   QList<QGraphicsItem*> valid;
   valid.reserve(candidates.size());
 
   for (QGraphicsItem* item : candidates) {
-    if (item == ignoreItem) continue;
-    if (item->parentItem() == ignoreItem) continue;
-    if (ignoreItem->parentItem() == item) continue;
+    if (item == ignoreItem)
+      continue;
+    if (item->parentItem() == ignoreItem)
+      continue;
+    if (ignoreItem->parentItem() == item)
+      continue;
 
     if (isSnappableItem(item)) {
       valid.append(item);
@@ -52,10 +48,12 @@ QList<QGraphicsItem*> SnappingUtils::getSnappingCandidates(
   return valid;
 }
 
-double SnappingUtils::snapValueToCandidates(
-    double proposedValue, double orthoStart, double orthoLength,
-    const QList<QGraphicsItem*>& candidates, Qt::Orientation snapAxis,
-    bool& outSnapped) {
+double SnappingUtils::snapValueToCandidates(double proposedValue,
+                                            double orthoStart,
+                                            double orthoLength,
+                                            const QList<QGraphicsItem*>& candidates,
+                                            Qt::Orientation snapAxis,
+                                            bool& outSnapped) {
   outSnapped = false;
 
   for (QGraphicsItem* item : candidates) {
@@ -93,12 +91,15 @@ double SnappingUtils::snapValueToCandidates(
   return proposedValue;
 }
 
-QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
+QPointF SnappingUtils::snapPosition(LayoutScene* scene,
+                                    QGraphicsItem* selfItem,
                                     const QPointF& proposedPos,
                                     const QRectF& logicalRect,
                                     QList<QLineF>* outGuides) {
-  if (!scene) return proposedPos;
-  if (outGuides) outGuides->clear();
+  if (!scene)
+    return proposedPos;
+  if (outGuides)
+    outGuides->clear();
 
   QPointF contentOffset = logicalRect.topLeft();
 
@@ -116,13 +117,13 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
   bool snappedX = false;
   bool snappedY = false;
 
-  // Helper to add vertical guide
   auto addVGuide = [&](double x) {
-    if (outGuides) outGuides->append(QLineF(x, -10000, x, 10000));
+    if (outGuides)
+      outGuides->append(QLineF(x, -10000, x, 10000));
   };
-  // Helper to add horizontal guide
   auto addHGuide = [&](double y) {
-    if (outGuides) outGuides->append(QLineF(-10000, y, 10000, y));
+    if (outGuides)
+      outGuides->append(QLineF(-10000, y, 10000, y));
   };
 
   // 1. Guide Lines
@@ -180,15 +181,13 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
 
   // 3. Other Items
   if (!snappedX || !snappedY) {
-    QList<QGraphicsItem*> nearbyItems =
-        getSnappingCandidates(scene, visualRect, selfItem);
+    QList<QGraphicsItem*> nearbyItems = getSnappingCandidates(scene, visualRect, selfItem);
 
     for (QGraphicsItem* item : nearbyItems) {
       QRectF otherRect = item->sceneBoundingRect();
 
       // Snap X
-      if (!snappedX && rangesOverlap(visualTop, height, otherRect.top(),
-                                     otherRect.height())) {
+      if (!snappedX && rangesOverlap(visualTop, height, otherRect.top(), otherRect.height())) {
         if (isClose(visualLeft, otherRect.right())) {
           visualLeft = otherRect.right();
           snappedX = true;
@@ -209,8 +208,7 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
       }
 
       // Snap Y
-      if (!snappedY && rangesOverlap(visualLeft, width, otherRect.left(),
-                                     otherRect.width())) {
+      if (!snappedY && rangesOverlap(visualLeft, width, otherRect.left(), otherRect.width())) {
         if (isClose(visualTop, otherRect.bottom())) {
           visualTop = otherRect.bottom();
           snappedY = true;
@@ -235,15 +233,19 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene, QGraphicsItem* selfItem,
   // 4. Grid
   if (scene->isGridEnabled()) {
     int gs = scene->gridSize();
-    if (!snappedX) visualLeft = snapToGridVal(visualLeft, gs);
-    if (!snappedY) visualTop = snapToGridVal(visualTop, gs);
+    if (!snappedX)
+      visualLeft = snapToGridVal(visualLeft, gs);
+    if (!snappedY)
+      visualTop = snapToGridVal(visualTop, gs);
   }
 
   // 5. Clamping
-  if (visualLeft < validArea.left()) visualLeft = validArea.left();
+  if (visualLeft < validArea.left())
+    visualLeft = validArea.left();
   if (visualLeft + width > validArea.right())
     visualLeft = validArea.right() - width;
-  if (visualTop < validArea.top()) visualTop = validArea.top();
+  if (visualTop < validArea.top())
+    visualTop = validArea.top();
   if (visualTop + height > validArea.bottom())
     visualTop = validArea.bottom() - height;
 

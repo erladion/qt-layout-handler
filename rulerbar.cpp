@@ -6,6 +6,7 @@
 #include <QPainter>
 #include <QStatusBar>
 #include <cmath>
+#include "constants.h"
 #include "guidelineitem.h"
 
 RulerBar::RulerBar(Orientation orientation, QGraphicsView* view, QWidget* parent)
@@ -13,11 +14,13 @@ RulerBar::RulerBar(Orientation orientation, QGraphicsView* view, QWidget* parent
   setMouseTracking(true);
 
   if (m_orientation == Horizontal)
-    setFixedHeight(25);
+    setFixedHeight(Constants::RulerThickness);
   else
-    setFixedWidth(25);
+    setFixedWidth(Constants::RulerThickness);
 
-  setStyleSheet("background-color: #2b2b2b; color: #a0a0a0;");
+  setStyleSheet(QString("background-color: %1; color: %2;")
+                    .arg(QColor::fromRgba(Constants::Color::RulerBackground).name())
+                    .arg(QColor::fromRgba(Constants::Color::RulerText).name()));
 }
 
 void RulerBar::updateCursorPos(const QPoint& pos) {
@@ -31,7 +34,6 @@ void RulerBar::updateCursorPos(const QPoint& pos) {
   else
     m_cursorPos = scenePos.y();
 
-  // Update Status Bar with integer coordinates
   QMainWindow* mainWindow = qobject_cast<QMainWindow*>(window());
   if (mainWindow && mainWindow->statusBar()) {
     QString coordText = QString("X: %1, Y: %2").arg(static_cast<int>(std::round(scenePos.x()))).arg(static_cast<int>(std::round(scenePos.y())));
@@ -49,8 +51,6 @@ void RulerBar::mouseMoveEvent(QMouseEvent* event) {
     } else {
       viewPos = QPoint(0, event->pos().y());
     }
-
-    // Delegate to shared function to ensure status bar updates
     updateCursorPos(viewPos);
   }
 
@@ -74,14 +74,12 @@ void RulerBar::mousePressEvent(QMouseEvent* event) {
 
 void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
   if (m_dragging && m_view) {
-    // Condition 1: Dragged out into view
     bool droppedInView = false;
     if (m_orientation == Horizontal && event->pos().y() > height())
       droppedInView = true;
     if (m_orientation == Vertical && event->pos().x() > width())
       droppedInView = true;
 
-    // Condition 2: Simply clicked inside the ruler
     bool clickedInRuler = rect().contains(event->pos());
 
     if (droppedInView || clickedInRuler) {
@@ -91,18 +89,14 @@ void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
       qreal pos;
 
       if (m_orientation == Horizontal) {
-        // Top Ruler: measures X axis -> Create Vertical Line
         guideOri = GuideLineItem::Vertical;
         pos = dropScenePos.x();
       } else {
-        // Left Ruler: measures Y axis -> Create Horizontal Line
         guideOri = GuideLineItem::Horizontal;
         pos = dropScenePos.y();
       }
 
       GuideLineItem* guide = new GuideLineItem(guideOri, pos);
-
-      // REVERT: Direct add to scene (No Undo Command)
       if (m_view->scene()) {
         m_view->scene()->addItem(guide);
       }
@@ -117,9 +111,9 @@ void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
 void RulerBar::paintEvent(QPaintEvent* event) {
   Q_UNUSED(event);
   QPainter p(this);
-  p.fillRect(rect(), QColor(43, 43, 43));
+  p.fillRect(rect(), QColor::fromRgba(Constants::Color::RulerBackground));
 
-  p.setPen(QColor(160, 160, 160));
+  p.setPen(QColor::fromRgba(Constants::Color::RulerText));
   QFont font = p.font();
   font.setPointSize(7);
   p.setFont(font);
@@ -179,7 +173,7 @@ void RulerBar::paintEvent(QPaintEvent* event) {
     }
   }
 
-  p.setPen(QPen(Qt::red, 1));
+  p.setPen(QPen(QColor::fromRgba(Constants::Color::RulerMarker), 1));
 
   QPointF markerPt;
   if (m_orientation == Horizontal)

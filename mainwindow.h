@@ -8,28 +8,27 @@
 #include <QLabel>
 #include <QMainWindow>
 #include <QSlider>
-#include <QSpinBox>
-
 #include "snappingitemgroup.h"
 
 class LayoutScene;
 class RulerBar;
 class PropertiesDialog;
 class RibbonSection;
+class QSpinBox;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
 
- public:
+public:
   explicit MainWindow(QWidget* parent = nullptr);
   ~MainWindow();
 
- protected:
+protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
 
- private slots:
+private slots:
   // UI Slots
   void toggleGrid(bool checked);
   void onGridSizeChanged(int val);
@@ -49,20 +48,26 @@ class MainWindow : public QMainWindow {
   void setWallpaper();
   void applyTemplate(QAction* action);
 
-  // Feature 6 & 7 Slots
   void toggleLock();
   void groupItems();
   void ungroupItems();
 
-  // Properties Slots
+  void alignLeft();
+  void alignRight();
+  void alignTop();
+  void alignBottom();
+  void alignCenterH();
+  void alignCenterV();
+  void distributeH();
+  void distributeV();
+
   void toggleProperties();
   void onSelectionChanged();
   void onSceneChanged(const QList<QRectF>& region);
 
-  // Settings
   void openSettings();
 
- private:
+private:
   void createToolbar();
   void createMenuBar();
   void updateRulers();
@@ -70,37 +75,36 @@ class MainWindow : public QMainWindow {
   bool maybeSave();
   void setModified(bool modified);
 
-  // Helper to connect scene specific signals
   void connectSceneSignals();
 
   QString getTemplateXml(const QString& name);
 
-  LayoutScene* scene;
-  QGraphicsView* view;
+  LayoutScene* m_pScene;
+  QGraphicsView* m_pView;
 
-  RulerBar* m_hRuler;
-  RulerBar* m_vRuler;
-  QWidget* m_corner;  // Added m_corner to track visibility
+  RulerBar* m_pHRuler;
+  RulerBar* m_pVRuler;
+  QWidget* m_pCorner;
 
-  QSlider* gridSlider;
-  QLabel* gridLabel;
+  QSlider* m_pGridSlider;
+  QLabel* m_pGridLabel;
 
-  // Spinboxes for Top/Bottom bar height (Restored)
-  QSpinBox* m_topBarSpin;
-  QSpinBox* m_botBarSpin;
+  // Spinboxes for Top/Bottom bar height
+  QSpinBox* m_pTopBarSpin;
+  QSpinBox* m_pBotBarSpin;
 
   // Properties Window
-  PropertiesDialog* m_propDialog;
-  QAction* m_viewPropAct;
+  PropertiesDialog* m_pProperties;
+  QAction* m_pViewPropertiesAction;
 
   // Toolbar Tracking
-  QToolBar* m_toolbar;
+  QToolBar* m_pToolbar;
 
   // Ribbon Sections
-  RibbonSection* m_secInsert;
-  RibbonSection* m_secArrange;
-  RibbonSection* m_secAlign;
-  RibbonSection* m_secView;
+  RibbonSection* m_pSectionInsert;
+  RibbonSection* m_pSectionArrange;
+  RibbonSection* m_pSectionAlign;
+  RibbonSection* m_pSectionView;
 
   bool m_isModified;
 };
