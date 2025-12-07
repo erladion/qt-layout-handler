@@ -11,7 +11,6 @@ class SettingsDialog : public QDialog {
 public:
   explicit SettingsDialog(QWidget* parent = nullptr);
 
-  // Static helpers to access settings globally
   static int getAppFontSize();
   static int getTopBarHeight();
   static int getBottomBarHeight();
@@ -20,9 +19,9 @@ private slots:
   void saveSettings();
 
 private:
-  QSpinBox* m_fontSizeSpin;
-  QSpinBox* m_topBarSpin;
-  QSpinBox* m_botBarSpin;
+  QSpinBox* m_pFontSizeSpin;
+  QSpinBox* m_pTopBarSpin;
+  QSpinBox* m_pBotBarSpin;
 };
 
 #endif  // SETTINGSDIALOG_H

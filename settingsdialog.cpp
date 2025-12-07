@@ -14,25 +14,25 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   QFormLayout* form = new QFormLayout();
 
   // Font Size
-  m_fontSizeSpin = new QSpinBox();
-  m_fontSizeSpin->setRange(8, 72);
-  m_fontSizeSpin->setSuffix(" pt");
-  m_fontSizeSpin->setValue(getAppFontSize());
-  form->addRow("App Window Base Font Size:", m_fontSizeSpin);
+  m_pFontSizeSpin = new QSpinBox();
+  m_pFontSizeSpin->setRange(8, 72);
+  m_pFontSizeSpin->setSuffix(" pt");
+  m_pFontSizeSpin->setValue(getAppFontSize());
+  form->addRow("App Window Base Font Size:", m_pFontSizeSpin);
 
   // Top Bar
-  m_topBarSpin = new QSpinBox();
-  m_topBarSpin->setRange(0, 500);
-  m_topBarSpin->setSuffix(" px");
-  m_topBarSpin->setValue(getTopBarHeight());
-  form->addRow("Default Top Bar Height:", m_topBarSpin);
+  m_pTopBarSpin = new QSpinBox();
+  m_pTopBarSpin->setRange(0, 500);
+  m_pTopBarSpin->setSuffix(" px");
+  m_pTopBarSpin->setValue(getTopBarHeight());
+  form->addRow("Default Top Bar Height:", m_pTopBarSpin);
 
   // Bottom Bar
-  m_botBarSpin = new QSpinBox();
-  m_botBarSpin->setRange(0, 500);
-  m_botBarSpin->setSuffix(" px");
-  m_botBarSpin->setValue(getBottomBarHeight());
-  form->addRow("Default Bottom Bar Height:", m_botBarSpin);
+  m_pBotBarSpin = new QSpinBox();
+  m_pBotBarSpin->setRange(0, 500);
+  m_pBotBarSpin->setSuffix(" px");
+  m_pBotBarSpin->setValue(getBottomBarHeight());
+  form->addRow("Default Bottom Bar Height:", m_pBotBarSpin);
 
   mainLayout->addLayout(form);
 
@@ -51,24 +51,24 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
 }
 
 void SettingsDialog::saveSettings() {
-  QSettings settings("MyCompany", "LayoutManager");
-  settings.setValue("appFontSize", m_fontSizeSpin->value());
-  settings.setValue("defaultTopBar", m_topBarSpin->value());
-  settings.setValue("defaultBotBar", m_botBarSpin->value());
+  QSettings settings;
+  settings.setValue("appFontSize", m_pFontSizeSpin->value());
+  settings.setValue("defaultTopBar", m_pTopBarSpin->value());
+  settings.setValue("defaultBotBar", m_pBotBarSpin->value());
   accept();
 }
 
 int SettingsDialog::getAppFontSize() {
-  QSettings settings("MyCompany", "LayoutManager");
+  QSettings settings;
   return settings.value("appFontSize", 20).toInt();
 }
 
 int SettingsDialog::getTopBarHeight() {
-  QSettings settings("MyCompany", "LayoutManager");
+  QSettings settings;
   return settings.value("defaultTopBar", 30).toInt();
 }
 
 int SettingsDialog::getBottomBarHeight() {
-  QSettings settings("MyCompany", "LayoutManager");
+  QSettings settings;
   return settings.value("defaultBotBar", 40).toInt();
 }

@@ -1,7 +1,9 @@
 #include "snappingutils.h"
+
 #include <QGraphicsItem>
 #include <QtMath>
-#include "constants.h"  // NEW
+
+#include "constants.h"
 #include "guidelineitem.h"
 #include "layoutscene.h"
 #include "resizableappitem.h"
@@ -9,7 +11,7 @@
 #include "zoneitem.h"
 
 bool SnappingUtils::isSnappableItem(QGraphicsItem* item) {
-  return (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<SnappingItemGroup*>(item));
+  return (item->type() == Constants::Item::AppItem || item->type() == Constants::Item::ZoneItem || item->type() == Constants::Item::GroupItem);
 }
 
 bool SnappingUtils::isClose(double value, double target) {
@@ -34,12 +36,17 @@ QList<QGraphicsItem*> SnappingUtils::getSnappingCandidates(LayoutScene* scene, c
   valid.reserve(candidates.size());
 
   for (QGraphicsItem* item : candidates) {
-    if (item == ignoreItem)
+    if (item == ignoreItem) {
       continue;
-    if (item->parentItem() == ignoreItem)
+    }
+
+    if (item->parentItem() == ignoreItem) {
       continue;
-    if (ignoreItem->parentItem() == item)
+    }
+
+    if (ignoreItem->parentItem() == item) {
       continue;
+    }
 
     if (isSnappableItem(item)) {
       valid.append(item);
@@ -82,6 +89,7 @@ double SnappingUtils::snapValueToCandidates(double proposedValue,
         outSnapped = true;
         return target1;
       }
+
       if (isClose(proposedValue, target2)) {
         outSnapped = true;
         return target2;
@@ -96,10 +104,13 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene,
                                     const QPointF& proposedPos,
                                     const QRectF& logicalRect,
                                     QList<QLineF>* outGuides) {
-  if (!scene)
+  if (!scene) {
     return proposedPos;
-  if (outGuides)
+  }
+
+  if (outGuides) {
     outGuides->clear();
+  }
 
   QPointF contentOffset = logicalRect.topLeft();
 
@@ -118,17 +129,20 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene,
   bool snappedY = false;
 
   auto addVGuide = [&](double x) {
-    if (outGuides)
+    if (outGuides) {
       outGuides->append(QLineF(x, -10000, x, 10000));
+    }
   };
   auto addHGuide = [&](double y) {
-    if (outGuides)
+    if (outGuides) {
       outGuides->append(QLineF(-10000, y, 10000, y));
+    }
   };
 
   // 1. Guide Lines
   for (QGraphicsItem* item : scene->items()) {
-    if (GuideLineItem* guide = dynamic_cast<GuideLineItem*>(item)) {
+    if (item->type() == Constants::Item::GuideItem) {
+      GuideLineItem* guide = static_cast<GuideLineItem*>(item);
       if (guide->orientation() == GuideLineItem::Vertical) {
         double guideX = guide->pos().x();
         if (isClose(visualLeft, guideX)) {
@@ -233,21 +247,27 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene,
   // 4. Grid
   if (scene->isGridEnabled()) {
     int gs = scene->gridSize();
-    if (!snappedX)
+    if (!snappedX) {
       visualLeft = snapToGridVal(visualLeft, gs);
-    if (!snappedY)
+    }
+    if (!snappedY) {
       visualTop = snapToGridVal(visualTop, gs);
+    }
   }
 
   // 5. Clamping
-  if (visualLeft < validArea.left())
+  if (visualLeft < validArea.left()) {
     visualLeft = validArea.left();
-  if (visualLeft + width > validArea.right())
+  }
+  if (visualLeft + width > validArea.right()) {
     visualLeft = validArea.right() - width;
-  if (visualTop < validArea.top())
+  }
+  if (visualTop < validArea.top()) {
     visualTop = validArea.top();
-  if (visualTop + height > validArea.bottom())
+  }
+  if (visualTop + height > validArea.bottom()) {
     visualTop = validArea.bottom() - height;
+  }
 
   return QPointF(visualLeft - contentOffset.x(), visualTop - contentOffset.y());
 }

@@ -10,29 +10,31 @@
 #include "guidelineitem.h"
 
 RulerBar::RulerBar(Orientation orientation, QGraphicsView* view, QWidget* parent)
-    : QWidget(parent), m_orientation(orientation), m_view(view), m_cursorPos(-1000), m_dragging(false) {
+    : QWidget(parent), m_orientation(orientation), m_pView(view), m_cursorPos(-1000), m_dragging(false) {
   setMouseTracking(true);
 
-  if (m_orientation == Horizontal)
+  if (m_orientation == Horizontal) {
     setFixedHeight(Constants::RulerThickness);
-  else
+  } else {
     setFixedWidth(Constants::RulerThickness);
+  }
 
   setStyleSheet(QString("background-color: %1; color: %2;")
-                    .arg(QColor::fromRgba(Constants::Color::RulerBackground).name())
-                    .arg(QColor::fromRgba(Constants::Color::RulerText).name()));
+                    .arg(QColor::fromRgba(Constants::Color::RulerBackground).name(), QColor::fromRgba(Constants::Color::RulerText).name()));
 }
 
 void RulerBar::updateCursorPos(const QPoint& pos) {
-  if (!m_view)
+  if (!m_pView) {
     return;
+  }
 
-  QPointF scenePos = m_view->mapToScene(pos);
+  QPointF scenePos = m_pView->mapToScene(pos);
 
-  if (m_orientation == Horizontal)
+  if (m_orientation == Horizontal) {
     m_cursorPos = scenePos.x();
-  else
+  } else {
     m_cursorPos = scenePos.y();
+  }
 
   QMainWindow* mainWindow = qobject_cast<QMainWindow*>(window());
   if (mainWindow && mainWindow->statusBar()) {
@@ -44,7 +46,7 @@ void RulerBar::updateCursorPos(const QPoint& pos) {
 }
 
 void RulerBar::mouseMoveEvent(QMouseEvent* event) {
-  if (m_view) {
+  if (m_pView) {
     QPoint viewPos;
     if (m_orientation == Horizontal) {
       viewPos = QPoint(event->pos().x(), 0);
@@ -55,10 +57,11 @@ void RulerBar::mouseMoveEvent(QMouseEvent* event) {
   }
 
   if (m_dragging) {
-    if (m_orientation == Horizontal)
+    if (m_orientation == Horizontal) {
       m_dragPos = event->pos().y();
-    else
+    } else {
       m_dragPos = event->pos().x();
+    }
     setCursor(Qt::SplitVCursor);
   }
 
@@ -73,17 +76,19 @@ void RulerBar::mousePressEvent(QMouseEvent* event) {
 }
 
 void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
-  if (m_dragging && m_view) {
+  if (m_dragging && m_pView) {
     bool droppedInView = false;
-    if (m_orientation == Horizontal && event->pos().y() > height())
+    if (m_orientation == Horizontal && event->pos().y() > height()) {
       droppedInView = true;
-    if (m_orientation == Vertical && event->pos().x() > width())
+    }
+    if (m_orientation == Vertical && event->pos().x() > width()) {
       droppedInView = true;
+    }
 
     bool clickedInRuler = rect().contains(event->pos());
 
     if (droppedInView || clickedInRuler) {
-      QPointF dropScenePos = m_view->mapToScene(event->pos());
+      QPointF dropScenePos = m_pView->mapToScene(event->pos());
 
       GuideLineItem::Orientation guideOri;
       qreal pos;
@@ -97,8 +102,8 @@ void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
       }
 
       GuideLineItem* guide = new GuideLineItem(guideOri, pos);
-      if (m_view->scene()) {
-        m_view->scene()->addItem(guide);
+      if (m_pView->scene()) {
+        m_pView->scene()->addItem(guide);
       }
     }
 
@@ -118,15 +123,16 @@ void RulerBar::paintEvent(QPaintEvent* event) {
   font.setPointSize(7);
   p.setFont(font);
 
-  if (!m_view)
+  if (!m_pView) {
     return;
+  }
 
-  QRect viewportRect = m_view->viewport()->rect();
-  QPointF topLeft = m_view->mapToScene(viewportRect.topLeft());
-  QPointF bottomRight = m_view->mapToScene(viewportRect.bottomRight());
+  QRect viewportRect = m_pView->viewport()->rect();
+  QPointF topLeft = m_pView->mapToScene(viewportRect.topLeft());
+  QPointF bottomRight = m_pView->mapToScene(viewportRect.bottomRight());
 
   double start, end;
-  double scale = m_view->transform().m11();
+  double scale = m_pView->transform().m11();
 
   if (m_orientation == Horizontal) {
     start = topLeft.x();
@@ -137,26 +143,29 @@ void RulerBar::paintEvent(QPaintEvent* event) {
   }
 
   double step = 100;
-  if (scale > 2.0)
+  if (scale > 2.0) {
     step = 10;
-  else if (scale > 0.8)
+  } else if (scale > 0.8) {
     step = 50;
-  else if (scale < 0.2)
+  } else if (scale < 0.2) {
     step = 500;
+  }
 
   double firstTick = std::floor(start / step) * step;
   int numTicks = std::ceil((end - firstTick) / step);
 
   for (int i = 0; i <= numTicks; ++i) {
     double v = firstTick + (i * step);
-    if (v > end)
+    if (v > end) {
       break;
+    }
 
     QPointF widgetPt;
-    if (m_orientation == Horizontal)
-      widgetPt = m_view->mapFromScene(v, 0);
-    else
-      widgetPt = m_view->mapFromScene(0, v);
+    if (m_orientation == Horizontal) {
+      widgetPt = m_pView->mapFromScene(v, 0);
+    } else {
+      widgetPt = m_pView->mapFromScene(0, v);
+    }
 
     int pos = (m_orientation == Horizontal) ? widgetPt.x() : widgetPt.y();
 
@@ -176,15 +185,17 @@ void RulerBar::paintEvent(QPaintEvent* event) {
   p.setPen(QPen(QColor::fromRgba(Constants::Color::RulerMarker), 1));
 
   QPointF markerPt;
-  if (m_orientation == Horizontal)
-    markerPt = m_view->mapFromScene(m_cursorPos, 0);
-  else
-    markerPt = m_view->mapFromScene(0, m_cursorPos);
+  if (m_orientation == Horizontal) {
+    markerPt = m_pView->mapFromScene(m_cursorPos, 0);
+  } else {
+    markerPt = m_pView->mapFromScene(0, m_cursorPos);
+  }
 
   int markerPos = (m_orientation == Horizontal) ? markerPt.x() : markerPt.y();
 
-  if (m_orientation == Horizontal)
+  if (m_orientation == Horizontal) {
     p.drawLine(markerPos, 0, markerPos, 25);
-  else
+  } else {
     p.drawLine(0, markerPos, 25, markerPos);
+  }
 }

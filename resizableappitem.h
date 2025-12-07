@@ -3,6 +3,8 @@
 
 #include <QGraphicsRectItem>
 
+#include "constants.h"
+
 class QGraphicsTextItem;
 
 class ResizableAppItem : public QGraphicsRectItem {
@@ -11,6 +13,7 @@ public:
 
   ResizableAppItem(const QString& appName, const QRectF& rect);
   QString name() const;
+  int type() const override { return Constants::Item::Types::AppItem; }
 
   void setLocked(bool locked);
   bool isLocked() const;
@@ -36,8 +39,8 @@ private:
   int m_resizeHandle;
   QString m_name;
 
-  QGraphicsTextItem* m_titleText;
-  QGraphicsTextItem* m_statusText;
+  QGraphicsTextItem* m_pTitleText;
+  QGraphicsTextItem* m_pStatusText;
   bool m_locked;
 
   int m_baseFontSize;

@@ -117,8 +117,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 bool MainWindow::maybeSave() {
-  if (!m_isModified)
+  if (!m_isModified) {
     return true;
+  }
 
   const QMessageBox::StandardButton ret = QMessageBox::warning(this, tr("Unsaved Changes"),
                                                                tr("The document has been modified.\n"
@@ -146,8 +147,10 @@ void MainWindow::setModified(bool modified) {
 }
 
 void MainWindow::connectSceneSignals() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   connect(m_pScene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
   connect(m_pScene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
 }
@@ -155,14 +158,18 @@ void MainWindow::connectSceneSignals() {
 void MainWindow::updateInterfaceState() {
   bool hasScene = (m_pScene != nullptr);
 
-  if (m_pSectionInsert)
+  if (m_pSectionInsert) {
     m_pSectionInsert->setEnabled(hasScene);
-  if (m_pSectionArrange)
+  }
+  if (m_pSectionArrange) {
     m_pSectionArrange->setEnabled(hasScene);
-  if (m_pSectionAlign)
+  }
+  if (m_pSectionAlign) {
     m_pSectionAlign->setEnabled(hasScene);
-  if (m_pSectionView)
+  }
+  if (m_pSectionView) {
     m_pSectionView->setEnabled(hasScene);
+  }
 
   m_pHRuler->setVisible(hasScene);
   m_pVRuler->setVisible(hasScene);
@@ -177,8 +184,9 @@ void MainWindow::updateInterfaceState() {
 }
 
 void MainWindow::newLayout() {
-  if (!maybeSave())
+  if (!maybeSave()) {
     return;
+  }
 
   NewLayoutDialog dlg(this);
   if (dlg.exec() == QDialog::Accepted) {
@@ -219,18 +227,22 @@ void MainWindow::newLayout() {
 }
 
 void MainWindow::closeLayout() {
-  if (!maybeSave())
+  if (!maybeSave()) {
     return;
-  if (!m_pScene)
+  }
+
+  if (!m_pScene) {
     return;
+  }
 
   m_pView->setScene(nullptr);
 
   m_pScene->deleteLater();
   m_pScene = nullptr;
 
-  if (m_pProperties)
+  if (m_pProperties) {
     m_pProperties->setItem(nullptr);
+  }
 
   updateInterfaceState();
   setModified(false);
@@ -243,7 +255,8 @@ void MainWindow::openSettings() {
     if (m_pScene) {
       int newSize = SettingsDialog::getAppFontSize();
       for (auto item : m_pScene->items()) {
-        if (auto app = dynamic_cast<ResizableAppItem*>(item)) {
+        if (item->type() == Constants::Item::AppItem) {
+          auto app = static_cast<ResizableAppItem*>(item);
           app->setBaseFontSize(newSize);
         }
       }
@@ -271,7 +284,7 @@ void MainWindow::openSettings() {
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (event->type() == QEvent::MouseMove) {
     QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
-    QPoint globalPos = mouseEvent->globalPos();
+    QPoint globalPos = mouseEvent->globalPosition().toPoint();
     QPoint viewPos = m_pView->viewport()->mapFromGlobal(globalPos);
     m_pHRuler->updateCursorPos(viewPos);
     m_pVRuler->updateCursorPos(viewPos);
@@ -296,31 +309,41 @@ void MainWindow::updateRulers() {
 }
 
 void MainWindow::toggleGrid(bool checked) {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   m_pScene->setGridEnabled(checked);
   m_pGridSlider->setEnabled(checked);
   updateRulers();
 }
 
 void MainWindow::onGridSizeChanged(int val) {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   m_pScene->setGridSize(val);
-  if (m_pGridLabel)
+  if (m_pGridLabel) {
     m_pGridLabel->setText(QString::number(val) + "px");
+  }
+
   updateRulers();
 }
 
 void MainWindow::onTopBarChanged(int val) {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   m_pScene->setTopBarHeight(val);
   updateRulers();
 }
 void MainWindow::onBotBarChanged(int val) {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   m_pScene->setBottomBarHeight(val);
   updateRulers();
 }
@@ -328,32 +351,39 @@ void MainWindow::onBotBarChanged(int val) {
 void MainWindow::toggleProperties() {
   if (m_pProperties->isVisible()) {
     m_pProperties->hide();
-    if (m_pViewPropertiesAction)
+    if (m_pViewPropertiesAction) {
       m_pViewPropertiesAction->setChecked(false);
+    }
   } else {
     m_pProperties->show();
     m_pProperties->raise();
     m_pProperties->activateWindow();
-    if (m_pViewPropertiesAction)
+    if (m_pViewPropertiesAction) {
       m_pViewPropertiesAction->setChecked(true);
-    if (m_pScene && !m_pScene->selectedItems().isEmpty())
+    }
+    if (m_pScene && !m_pScene->selectedItems().isEmpty()) {
       m_pProperties->setItem(m_pScene->selectedItems().first());
-    else
+    } else {
       m_pProperties->setItem(nullptr);
+    }
   }
 }
 
 void MainWindow::onSelectionChanged() {
-  if (!m_pProperties->isVisible())
+  if (!m_pProperties->isVisible()) {
     return;
-  if (!m_pScene)
+  }
+
+  if (!m_pScene) {
     return;
+  }
 
   QList<QGraphicsItem*> sel = m_pScene->selectedItems();
   if (sel.isEmpty()) {
     QTimer::singleShot(Constants::SelectionDebounceDelay, this, [this]() {
-      if (m_pScene && m_pScene->selectedItems().isEmpty())
+      if (m_pScene && m_pScene->selectedItems().isEmpty()) {
         m_pProperties->setItem(nullptr);
+      }
     });
   } else {
     m_pProperties->setItem(sel.first());
@@ -364,8 +394,9 @@ void MainWindow::onSelectionChanged() {
 void MainWindow::onSceneChanged(const QList<QRectF>& region) {
   Q_UNUSED(region);
   if (m_pScene) {
-    if (!m_isModified)
+    if (!m_isModified) {
       setModified(true);
+    }
     if (m_pProperties && m_pProperties->isVisible() && !m_pScene->selectedItems().isEmpty()) {
       m_pProperties->refreshValues();
     }
@@ -373,8 +404,10 @@ void MainWindow::onSceneChanged(const QList<QRectF>& region) {
 }
 
 void MainWindow::addApp(QAction* action) {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   QString type = action->text();
   double w = 400, h = 300;
   if (type == "Browser") {
@@ -397,8 +430,10 @@ void MainWindow::addApp(QAction* action) {
 }
 
 void MainWindow::addZone() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   ZoneItem* zone = new ZoneItem(QRectF(0, 0, 400, 400));
   QRectF safe = m_pScene->getWorkingArea();
   int startX = safe.left() + 50;
@@ -410,15 +445,18 @@ void MainWindow::addZone() {
 }
 
 void MainWindow::removeWindow() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   QList<QGraphicsItem*> selected = m_pScene->selectedItems();
 
-  if (selected.isEmpty())
+  if (selected.isEmpty()) {
     return;
+  }
 
   for (auto item : selected) {
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<GuideLineItem*>(item)) {
+    if (item->type() == Constants::Item::AppItem || item->type() == Constants::Item::ZoneItem || item->type() == Constants::Item::GuideItem) {
       m_pScene->removeItem(item);
       delete item;
     }
@@ -426,17 +464,20 @@ void MainWindow::removeWindow() {
 }
 
 void MainWindow::groupItems() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   QList<QGraphicsItem*> selected = m_pScene->selectedItems();
 
   QList<QGraphicsItem*> itemsToGroup;
   QList<SnappingItemGroup*> groupsToMerge;
 
   for (QGraphicsItem* item : selected) {
-    if (SnappingItemGroup* grp = dynamic_cast<SnappingItemGroup*>(item)) {
+    if (item->type() == Constants::Item::GroupItem) {
+      SnappingItemGroup* grp = static_cast<SnappingItemGroup*>(item);
       groupsToMerge.append(grp);
-    } else if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item)) {
+    } else if (item->type() == Constants::Item::AppItem || item->type() == Constants::Item::ZoneItem) {
       itemsToGroup.append(item);
     }
   }
@@ -475,15 +516,19 @@ void MainWindow::groupItems() {
 }
 
 void MainWindow::ungroupItems() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   QList<QGraphicsItem*> selected = m_pScene->selectedItems();
-  if (selected.isEmpty())
+  if (selected.isEmpty()) {
     return;
+  }
 
   bool any = false;
   for (auto item : selected) {
-    if (SnappingItemGroup* group = dynamic_cast<SnappingItemGroup*>(item)) {
+    if (item->type() == Constants::Item::GroupItem) {
+      SnappingItemGroup* group = static_cast<SnappingItemGroup*>(item);
       m_pScene->destroyItemGroup(group);
       any = true;
     }
@@ -494,25 +539,33 @@ void MainWindow::ungroupItems() {
 }
 
 void MainWindow::toggleLock() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   QList<QGraphicsItem*> selected = m_pScene->selectedItems();
   for (auto item : selected) {
-    if (ResizableAppItem* app = dynamic_cast<ResizableAppItem*>(item)) {
+    if (item->type() == Constants::Item::AppItem) {
+      ResizableAppItem* app = static_cast<ResizableAppItem*>(item);
       app->setLocked(!app->isLocked());
     }
   }
 }
 
 void MainWindow::setWallpaper() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
+
   QString fileName = QFileDialog::getOpenFileName(this, "Select Wallpaper", "", "Images (*.png *.jpg *.jpeg *.bmp)");
-  if (fileName.isEmpty())
+  if (fileName.isEmpty()) {
     return;
+  }
+
   QPixmap pix(fileName);
-  if (pix.isNull())
+  if (pix.isNull()) {
     return;
+  }
   m_pScene->setWallpaper(pix);
   statusBar()->showMessage("Wallpaper loaded.", Constants::StatusMessageDuration);
 }
@@ -523,14 +576,17 @@ QString MainWindow::getTemplateXml(const QString& name) {
   } else if (name == "Streaming") {
     return R"(<Layout><App name="OBS" x="0" y="30" width="480" height="1010" /><App name="Game" x="480" y="30" width="960" height="1010" /><App name="Chat" x="1440" y="30" width="480" height="1010" /></Layout>)";
   }
-  return "";
+  return QString();
 }
 
 void MainWindow::applyTemplate(QAction* action) {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
-  if (!maybeSave())
+  }
+
+  if (!maybeSave()) {
     return;
+  }
 
   QString presetName = action->text();
   QString xmlContent = getTemplateXml(presetName);
@@ -541,11 +597,13 @@ void MainWindow::applyTemplate(QAction* action) {
 }
 
 bool MainWindow::saveLayout() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return false;
+  }
   QString fileName = QFileDialog::getSaveFileName(this, "Save Layout", "", "XML Files (*.xml)");
-  if (fileName.isEmpty())
+  if (fileName.isEmpty()) {
     return false;
+  }
 
   if (LayoutSerializer::save(m_pScene, fileName)) {
     setModified(false);
@@ -558,12 +616,14 @@ bool MainWindow::saveLayout() {
 }
 
 void MainWindow::loadLayout() {
-  if (!maybeSave())
+  if (!maybeSave()) {
     return;
+  }
 
   QString fileName = QFileDialog::getOpenFileName(this, "Load Layout", "", "XML Files (*.xml)");
-  if (fileName.isEmpty())
+  if (fileName.isEmpty()) {
     return;
+  }
 
   if (!m_pScene) {
     m_pScene = new LayoutScene(0, 0, 1920, 1080, this);
@@ -597,36 +657,51 @@ void MainWindow::loadLayout() {
 }
 
 void MainWindow::alignLeft() {
-  if (m_pScene)
+  if (m_pScene) {
     m_pScene->alignSelectionLeft();
+  }
 }
+
 void MainWindow::alignRight() {
-  if (m_pScene)
+  if (m_pScene) {
     m_pScene->alignSelectionRight();
+  }
 }
+
 void MainWindow::alignTop() {
-  if (m_pScene)
+  if (m_pScene) {
     m_pScene->alignSelectionTop();
+  }
 }
+
 void MainWindow::alignBottom() {
-  if (m_pScene)
+  if (m_pScene) {
     m_pScene->alignSelectionBottom();
+  }
 }
+
 void MainWindow::alignCenterH() {
-  if (m_pScene)
+  if (m_pScene) {
     m_pScene->alignSelectionCenterH();
+  }
 }
+
 void MainWindow::alignCenterV() {
-  if (m_pScene)
+  if (m_pScene) {
     m_pScene->alignSelectionCenterV();
+  }
 }
+
 void MainWindow::distributeH() {
-  if (m_pScene)
+  if (m_pScene) {
     m_pScene->distributeSelectionH();
+  }
 }
+
 void MainWindow::distributeV() {
-  if (m_pScene)
+  if (m_pScene) {
     m_pScene->distributeSelectionV();
+  }
 }
 
 void MainWindow::createMenuBar() {
@@ -653,12 +728,10 @@ void MainWindow::createToolbar() {
   m_pToolbar->setMovable(false);
   m_pToolbar->addWidget(ribbon);
 
-  QString controlStyle = QString(Constants::Style::Menu)
-                             .arg(QColor(Constants::Color::RibbonBg).name())
-                             .arg(QColor(Constants::Color::RibbonBorder).name())
-                             .arg(QColor(Constants::Color::RibbonText).name())
-                             .arg(QColor(Constants::Color::RibbonHighlight).name())
-                             .arg(QColor(Constants::Color::RibbonHighlightText).name());
+  QString controlStyle =
+      QString(Constants::Style::Menu)
+          .arg(QColor(Constants::Color::RibbonBg).name(), QColor(Constants::Color::RibbonBorder).name(), QColor(Constants::Color::RibbonText).name(),
+               QColor(Constants::Color::RibbonHighlight).name(), QColor(Constants::Color::RibbonHighlightText).name());
 
   // --- SECTION: FILE ---
   RibbonSection* fileSec = ribbon->addSection("File", QIcon(":/icons/section-file.svg"));

@@ -12,24 +12,23 @@ ZoneItem::ZoneItem(const QRectF& rect, QGraphicsItem* parent) : QGraphicsRectIte
   setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemSendsGeometryChanges);
   setAcceptHoverEvents(true);
 
-  // FIX: Use fromRgba for transparency
   setBrush(QBrush(QColor::fromRgba(Constants::Color::ZoneItemFill)));
   setPen(QPen(QColor::fromRgba(Constants::Color::ZoneItemBorder), 2, Qt::DashLine));
 
-  m_label = new QGraphicsTextItem("Zone", this);
-  m_label->setDefaultTextColor(QColor::fromRgba(Constants::Color::ZoneItemText));
-  QFont f = m_label->font();
+  m_pLabel = new QGraphicsTextItem("Zone", this);
+  m_pLabel->setDefaultTextColor(QColor::fromRgba(Constants::Color::ZoneItemText));
+  QFont f = m_pLabel->font();
   f.setBold(true);
   f.setPointSize(12);
-  m_label->setFont(f);
+  m_pLabel->setFont(f);
 
   updateLabel();
 }
 
 void ZoneItem::updateLabel() {
   QRectF r = rect();
-  QRectF tr = m_label->boundingRect();
-  m_label->setPos(r.center().x() - tr.width() / 2, r.center().y() - tr.height() / 2);
+  QRectF tr = m_pLabel->boundingRect();
+  m_pLabel->setPos(r.center().x() - tr.width() / 2, r.center().y() - tr.height() / 2);
 }
 
 void ZoneItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
@@ -63,12 +62,13 @@ QVariant ZoneItem::itemChange(GraphicsItemChange change, const QVariant& value) 
 void ZoneItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event) {
   int handle = getHandleAt(event->pos());
   QCursor cursor = Qt::ArrowCursor;
-  if (handle == (Right | Bottom))
+  if (handle == (Right | Bottom)) {
     cursor = Qt::SizeFDiagCursor;
-  else if (handle & Right)
+  } else if (handle & Right) {
     cursor = Qt::SizeHorCursor;
-  else if (handle & Bottom)
+  } else if (handle & Bottom) {
     cursor = Qt::SizeVerCursor;
+  }
   setCursor(cursor);
   QGraphicsRectItem::hoverMoveEvent(event);
 }
@@ -84,8 +84,9 @@ void ZoneItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
   QGraphicsRectItem::mouseReleaseEvent(event);
   if (scene()) {
     LayoutScene* ls = dynamic_cast<LayoutScene*>(scene());
-    if (ls)
+    if (ls) {
       ls->clearSnapGuides();
+    }
   }
 }
 
@@ -108,31 +109,37 @@ void ZoneItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 
     if (m_resizeHandle & Right) {
       proposedRight = SnappingUtils::snapValueToCandidates(proposedRight, currentY, rect().height(), candidates, Qt::Horizontal, snappedW);
-      if (!snappedW && SnappingUtils::isClose(proposedRight, validArea.right()))
+      if (!snappedW && SnappingUtils::isClose(proposedRight, validArea.right())) {
         proposedRight = validArea.right();
+      }
     }
 
     if (m_resizeHandle & Bottom) {
       proposedBottom = SnappingUtils::snapValueToCandidates(proposedBottom, currentX, rect().width(), candidates, Qt::Vertical, snappedH);
-      if (!snappedH && SnappingUtils::isClose(proposedBottom, validArea.bottom()))
+      if (!snappedH && SnappingUtils::isClose(proposedBottom, validArea.bottom())) {
         proposedBottom = validArea.bottom();
+      }
     }
 
     if (layoutScene && layoutScene->isGridEnabled()) {
       int gs = layoutScene->gridSize();
-      if (!snappedW && (m_resizeHandle & Right))
+      if (!snappedW && (m_resizeHandle & Right)) {
         proposedRight = SnappingUtils::snapToGridVal(proposedRight, gs);
-      if (!snappedH && (m_resizeHandle & Bottom))
+      }
+      if (!snappedH && (m_resizeHandle & Bottom)) {
         proposedBottom = SnappingUtils::snapToGridVal(proposedBottom, gs);
+      }
     }
 
     double newW = proposedRight - currentX;
     double newH = proposedBottom - currentY;
 
-    if (newW < 50)
+    if (newW < 50) {
       newW = 50;
-    if (newH < 50)
+    }
+    if (newH < 50) {
       newH = 50;
+    }
 
     setRect(0, 0, newW, newH);
     updateLabel();
@@ -145,9 +152,11 @@ int ZoneItem::getHandleAt(const QPointF& pt) {
   QRectF r = rect();
   int handle = None;
   qreal margin = 15;
-  if (qAbs(pt.x() - r.right()) < margin)
+  if (qAbs(pt.x() - r.right()) < margin) {
     handle |= Right;
-  if (qAbs(pt.y() - r.bottom()) < margin)
+  }
+  if (qAbs(pt.y() - r.bottom()) < margin) {
     handle |= Bottom;
+  }
   return handle;
 }

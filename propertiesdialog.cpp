@@ -13,18 +13,17 @@
 #include "snappingitemgroup.h"
 #include "zoneitem.h"
 
-PropertiesDialog::PropertiesDialog(QWidget* parent) : QWidget(parent), m_currentItem(nullptr), m_blockSignals(false), m_isDragging(false) {
+PropertiesDialog::PropertiesDialog(QWidget* parent) : QWidget(parent), m_pCurrentItem(nullptr), m_blockSignals(false), m_isDragging(false) {
   setFixedSize(Constants::PropertiesDialogWidth, Constants::PropertiesDialogHeight);
 
   QPalette pal = palette();
-  // FIX: Convert QRgb to QColor for Palette
-  pal.setColor(QPalette::WindowText, QColor(Constants::Color::PropText));
-  pal.setColor(QPalette::Text, QColor(Constants::Color::PropInputText));
-  pal.setColor(QPalette::ButtonText, QColor(Constants::Color::PropText));
-  pal.setColor(QPalette::Base, QColor(Constants::Color::PropInputBase));
+
+  pal.setColor(QPalette::WindowText, QColor::fromRgba(Constants::Color::PropText));
+  pal.setColor(QPalette::Text, QColor::fromRgba(Constants::Color::PropInputText));
+  pal.setColor(QPalette::ButtonText, QColor::fromRgba(Constants::Color::PropText));
+  pal.setColor(QPalette::Base, QColor::fromRgba(Constants::Color::PropInputBase));
   setPalette(pal);
 
-  // FIX: Convert QRgb to Hex String (.name()) for Stylesheet args
   QString spinStyle = QString(Constants::Style::SpinBox)
                           .arg(QColor(Constants::Color::PropInputBase).name(), QColor(Constants::Color::PropInputText).name(),
                                QColor(Constants::Color::PropBorder).name(), QColor(Constants::Color::SpinBoxDarkSelection).name(),
@@ -39,57 +38,54 @@ PropertiesDialog::PropertiesDialog(QWidget* parent) : QWidget(parent), m_current
   mainLayout->setContentsMargins(10, 10, 10, 10);
   mainLayout->setSpacing(10);
 
-  typeLabel = new QLabel("Properties");
-  typeLabel->setAlignment(Qt::AlignCenter);
-  QFont f = typeLabel->font();
+  m_pTypeLabel = new QLabel("Properties");
+  m_pTypeLabel->setAlignment(Qt::AlignCenter);
+  QFont f = m_pTypeLabel->font();
   f.setBold(true);
   f.setPointSize(10);
-  typeLabel->setFont(f);
+  m_pTypeLabel->setFont(f);
 
-  // FIX: Convert QRgb to Hex String
-  typeLabel->setStyleSheet(QString("background-color: %1; border-radius: 2px; padding: 4px; color: %2; border: 1px solid %3;")
-                               .arg(QColor(Constants::Color::PropHeaderBg).name())
-                               .arg(QColor(Constants::Color::PropText).name())
-                               .arg("transparent"));
-  mainLayout->addWidget(typeLabel);
+  m_pTypeLabel->setStyleSheet(QString("background-color: %1; border-radius: 2px; padding: 4px; color: %2; border: 1px solid %3;")
+                                  .arg(QColor(Constants::Color::PropHeaderBg).name(), QColor(Constants::Color::PropText).name(), "transparent"));
+  mainLayout->addWidget(m_pTypeLabel);
 
   QFormLayout* form = new QFormLayout();
   form->setLabelAlignment(Qt::AlignRight);
 
-  xSpin = new QSpinBox();
-  xSpin->setRange(-10000, 10000);
-  xSpin->setKeyboardTracking(false);
-  form->addRow("X:", xSpin);
+  m_pXSpin = new QSpinBox();
+  m_pXSpin->setRange(-10000, 10000);
+  m_pXSpin->setKeyboardTracking(false);
+  form->addRow("X:", m_pXSpin);
 
-  ySpin = new QSpinBox();
-  ySpin->setRange(-10000, 10000);
-  ySpin->setKeyboardTracking(false);
-  form->addRow("Y:", ySpin);
+  m_pYSpin = new QSpinBox();
+  m_pYSpin->setRange(-10000, 10000);
+  m_pYSpin->setKeyboardTracking(false);
+  form->addRow("Y:", m_pYSpin);
 
-  wSpin = new QSpinBox();
-  wSpin->setRange(10, 10000);
-  wSpin->setKeyboardTracking(false);
-  form->addRow("Width:", wSpin);
+  m_pWSpin = new QSpinBox();
+  m_pWSpin->setRange(10, 10000);
+  m_pWSpin->setKeyboardTracking(false);
+  form->addRow("Width:", m_pWSpin);
 
-  hSpin = new QSpinBox();
-  hSpin->setRange(10, 10000);
-  hSpin->setKeyboardTracking(false);
-  form->addRow("Height:", hSpin);
+  m_pHSpin = new QSpinBox();
+  m_pHSpin->setRange(10, 10000);
+  m_pHSpin->setKeyboardTracking(false);
+  form->addRow("Height:", m_pHSpin);
 
   mainLayout->addLayout(form);
   mainLayout->addStretch();
 
-  connect(xSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
-  connect(ySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
-  connect(wSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
-  connect(hSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(m_pXSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(m_pYSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(m_pWSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(m_pHSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
 }
 
 void PropertiesDialog::setItem(QGraphicsItem* item) {
-  m_currentItem = item;
+  m_pCurrentItem = item;
 
   if (!item) {
-    typeLabel->setText("No Selection");
+    m_pTypeLabel->setText("No Selection");
 
     m_blockSignals = true;
     auto clearSpin = [](QSpinBox* spin) {
@@ -97,36 +93,50 @@ void PropertiesDialog::setItem(QGraphicsItem* item) {
       spin->setSpecialValueText(" ");
       spin->setValue(spin->minimum());
     };
-    clearSpin(xSpin);
-    clearSpin(ySpin);
-    clearSpin(wSpin);
-    clearSpin(hSpin);
+    clearSpin(m_pXSpin);
+    clearSpin(m_pYSpin);
+    clearSpin(m_pWSpin);
+    clearSpin(m_pHSpin);
     m_blockSignals = false;
 
     return;
   }
 
-  if (auto app = dynamic_cast<ResizableAppItem*>(item)) {
-    typeLabel->setText(app->name());
-  } else if (dynamic_cast<ZoneItem*>(item)) {
-    typeLabel->setText("Zone");
-  } else if (dynamic_cast<SnappingItemGroup*>(item)) {
-    typeLabel->setText("Group");
-  } else if (auto guide = dynamic_cast<GuideLineItem*>(item)) {
-    if (guide->orientation() == GuideLineItem::Horizontal)
-      typeLabel->setText("Horizontal Guide");
-    else
-      typeLabel->setText("Vertical Guide");
-  } else {
-    typeLabel->setText("Item");
+  switch (item->type()) {
+    case Constants::Item::AppItem: {
+      auto app = static_cast<ResizableAppItem*>(item);
+      m_pTypeLabel->setText(app->name());
+      break;
+    }
+    case Constants::Item::ZoneItem: {
+      m_pTypeLabel->setText("Zone");
+      break;
+    }
+    case Constants::Item::GroupItem: {
+      m_pTypeLabel->setText("Group");
+      break;
+    }
+    case Constants::Item::GuideItem: {
+      auto guide = static_cast<GuideLineItem*>(item);
+      if (guide->orientation() == GuideLineItem::Horizontal) {
+        m_pTypeLabel->setText("Horizontal Guide");
+      } else {
+        m_pTypeLabel->setText("Vertical Guide");
+      }
+      break;
+    }
+    default:
+      m_pTypeLabel->setText("Item");
+      break;
   }
 
   refreshValues();
 }
 
 void PropertiesDialog::refreshValues() {
-  if (!m_currentItem)
+  if (!m_pCurrentItem) {
     return;
+  }
 
   m_blockSignals = true;
 
@@ -134,79 +144,89 @@ void PropertiesDialog::refreshValues() {
     spin->setEnabled(enabled);
     if (enabled) {
       spin->setSpecialValueText("");
-      if (!spin->hasFocus())
+      if (!spin->hasFocus()) {
         spin->setValue(value);
+      }
     } else {
       spin->setSpecialValueText(" ");
       spin->setValue(spin->minimum());
     }
   };
 
-  if (auto guide = dynamic_cast<GuideLineItem*>(m_currentItem)) {
+  if (m_pCurrentItem->type() == Constants::Item::GuideItem) {
+    auto guide = static_cast<GuideLineItem*>(m_pCurrentItem);
     if (guide->orientation() == GuideLineItem::Horizontal) {
-      updateField(xSpin, false, 0);
-      updateField(ySpin, true, guide->pos().y());
-      updateField(wSpin, false, 0);
-      updateField(hSpin, false, 0);
+      updateField(m_pXSpin, false, 0);
+      updateField(m_pYSpin, true, guide->pos().y());
+      updateField(m_pWSpin, false, 0);
+      updateField(m_pHSpin, false, 0);
     } else {
-      updateField(xSpin, true, guide->pos().x());
-      updateField(ySpin, false, 0);
-      updateField(wSpin, false, 0);
-      updateField(hSpin, false, 0);
+      updateField(m_pXSpin, true, guide->pos().x());
+      updateField(m_pYSpin, false, 0);
+      updateField(m_pWSpin, false, 0);
+      updateField(m_pHSpin, false, 0);
     }
-  } else if (auto group = dynamic_cast<SnappingItemGroup*>(m_currentItem)) {
-    updateField(xSpin, true, group->pos().x());
-    updateField(ySpin, true, group->pos().y());
-    updateField(wSpin, false, 0);
-    updateField(hSpin, false, 0);
+  } else if (m_pCurrentItem->type() == Constants::Item::GroupItem) {
+    auto group = static_cast<SnappingItemGroup*>(m_pCurrentItem);
+    updateField(m_pXSpin, true, group->pos().x());
+    updateField(m_pYSpin, true, group->pos().y());
+    updateField(m_pWSpin, false, 0);
+    updateField(m_pHSpin, false, 0);
   } else {
-    updateField(xSpin, true, m_currentItem->pos().x());
-    updateField(ySpin, true, m_currentItem->pos().y());
+    updateField(m_pXSpin, true, m_pCurrentItem->pos().x());
+    updateField(m_pYSpin, true, m_pCurrentItem->pos().y());
 
     QRectF r;
-    if (auto app = dynamic_cast<ResizableAppItem*>(m_currentItem))
+    if (m_pCurrentItem->type() == Constants::Item::AppItem) {
+      auto app = static_cast<ResizableAppItem*>(m_pCurrentItem);
       r = app->rect();
-    else if (auto zone = dynamic_cast<ZoneItem*>(m_currentItem))
+    } else if (m_pCurrentItem->type() == Constants::Item::ZoneItem) {
+      auto zone = static_cast<ZoneItem*>(m_pCurrentItem);
       r = zone->rect();
+    }
 
-    updateField(wSpin, true, r.width());
-    updateField(hSpin, true, r.height());
+    updateField(m_pWSpin, true, r.width());
+    updateField(m_pHSpin, true, r.height());
   }
 
   m_blockSignals = false;
 }
 
 void PropertiesDialog::onValueChanged() {
-  if (m_blockSignals || !m_currentItem)
+  if (m_blockSignals || !m_pCurrentItem) {
     return;
+  }
 
-  if (auto guide = dynamic_cast<GuideLineItem*>(m_currentItem)) {
+  if (m_pCurrentItem->type() == Constants::Item::GuideItem) {
+    auto guide = static_cast<GuideLineItem*>(m_pCurrentItem);
     if (guide->orientation() == GuideLineItem::Horizontal) {
-      guide->setPos(0, ySpin->value());
+      guide->setPos(0, m_pYSpin->value());
     } else {
-      guide->setPos(xSpin->value(), 0);
+      guide->setPos(m_pXSpin->value(), 0);
     }
-    m_currentItem->update();
+    m_pCurrentItem->update();
     emit propertyChanged();
     return;
   }
 
-  m_currentItem->setPos(xSpin->value(), ySpin->value());
+  m_pCurrentItem->setPos(m_pXSpin->value(), m_pYSpin->value());
 
-  if (auto app = dynamic_cast<ResizableAppItem*>(m_currentItem)) {
+  if (m_pCurrentItem->type() == Constants::Item::AppItem) {
+    auto app = static_cast<ResizableAppItem*>(m_pCurrentItem);
     QRectF r = app->rect();
-    r.setWidth(wSpin->value());
-    r.setHeight(hSpin->value());
+    r.setWidth(m_pWSpin->value());
+    r.setHeight(m_pHSpin->value());
     app->setRect(r);
     app->updateStatusText();
-  } else if (auto zone = dynamic_cast<ZoneItem*>(m_currentItem)) {
+  } else if (m_pCurrentItem->type() == Constants::Item::ZoneItem) {
+    auto zone = static_cast<ZoneItem*>(m_pCurrentItem);
     QRectF r = zone->rect();
-    r.setWidth(wSpin->value());
-    r.setHeight(hSpin->value());
+    r.setWidth(m_pWSpin->value());
+    r.setHeight(m_pHSpin->value());
     zone->setRect(r);
   }
 
-  m_currentItem->update();
+  m_pCurrentItem->update();
   emit propertyChanged();
 }
 
@@ -223,14 +243,18 @@ void PropertiesDialog::mouseMoveEvent(QMouseEvent* event) {
     QPoint newPos = mapToParent(event->pos()) - m_dragOffset;
     if (parentWidget()) {
       QRect parentRect = parentWidget()->rect();
-      if (newPos.x() < 0)
+      if (newPos.x() < 0) {
         newPos.setX(0);
-      if (newPos.x() + width() > parentRect.width())
+      }
+      if (newPos.x() + width() > parentRect.width()) {
         newPos.setX(parentRect.width() - width());
-      if (newPos.y() < 0)
+      }
+      if (newPos.y() < 0) {
         newPos.setY(0);
-      if (newPos.y() + height() > parentRect.height())
+      }
+      if (newPos.y() + height() > parentRect.height()) {
         newPos.setY(parentRect.height() - height());
+      }
     }
     move(newPos);
   }
@@ -249,8 +273,7 @@ void PropertiesDialog::paintEvent(QPaintEvent* event) {
   QPainter p(this);
   p.setRenderHint(QPainter::Antialiasing);
 
-  // FIX: Convert QRgb to QColor for Painter
-  p.setBrush(QColor(Constants::Color::PropBackground));
-  p.setPen(QPen(QColor(Constants::Color::PropBorder), 1));
+  p.setBrush(QColor::fromRgba(Constants::Color::PropBackground));
+  p.setPen(QPen(QColor::fromRgba(Constants::Color::PropBorder), 1));
   p.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 4, 4);
 }

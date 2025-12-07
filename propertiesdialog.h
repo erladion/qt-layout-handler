@@ -20,7 +20,6 @@ signals:
   void propertyChanged();
 
 protected:
-  // Dragging Logic overrides
   void mousePressEvent(QMouseEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
@@ -30,16 +29,15 @@ private slots:
   void onValueChanged();
 
 private:
-  QGraphicsItem* m_currentItem;
+  QGraphicsItem* m_pCurrentItem;
   bool m_blockSignals;
 
-  QSpinBox* xSpin;
-  QSpinBox* ySpin;
-  QSpinBox* wSpin;
-  QSpinBox* hSpin;
-  QLabel* typeLabel;
+  QSpinBox* m_pXSpin;
+  QSpinBox* m_pYSpin;
+  QSpinBox* m_pWSpin;
+  QSpinBox* m_pHSpin;
+  QLabel* m_pTypeLabel;
 
-  // Dragging state
   bool m_isDragging;
   QPoint m_dragOffset;
 };

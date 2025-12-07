@@ -1,11 +1,10 @@
 #ifndef SNAPPINGUTILS_H
 #define SNAPPINGUTILS_H
 
-#include <QLineF>  // FIX: Added include for QLineF
+#include <QLineF>
 #include <QList>
 #include <QPointF>
 #include <QRectF>
-#include <Qt>
 
 class LayoutScene;
 class QGraphicsItem;

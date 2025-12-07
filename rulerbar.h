@@ -23,7 +23,7 @@ protected:
 
 private:
   Orientation m_orientation;
-  QGraphicsView* m_view;
+  QGraphicsView* m_pView;
   double m_cursorPos;  // Position in SCENE coordinates
 
   // Dragging state for creating guides

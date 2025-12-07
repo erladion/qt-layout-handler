@@ -23,18 +23,17 @@ ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
   setAcceptHoverEvents(true);
   setCacheMode(QGraphicsItem::DeviceCoordinateCache);
 
-  // FIX: Use fromRgba to preserve transparency
   setBrush(QBrush(QColor::fromRgba(Constants::Color::AppItemFill)));
   setPen(QPen(QColor::fromRgba(Constants::Color::AppItemBorder), 1));
 
   m_baseFontSize = SettingsDialog::getAppFontSize();
 
-  m_titleText = new QGraphicsTextItem(appName, this);
-  m_titleText->setDefaultTextColor(QColor::fromRgba(Constants::Color::AppItemText));
-  m_titleText->setPos(5, 5);
+  m_pTitleText = new QGraphicsTextItem(appName, this);
+  m_pTitleText->setDefaultTextColor(QColor::fromRgba(Constants::Color::AppItemText));
+  m_pTitleText->setPos(5, 5);
 
-  m_statusText = new QGraphicsTextItem("", this);
-  m_statusText->setDefaultTextColor(QColor::fromRgba(Constants::Color::AppItemStatus));
+  m_pStatusText = new QGraphicsTextItem("", this);
+  m_pStatusText->setDefaultTextColor(QColor::fromRgba(Constants::Color::AppItemStatus));
 
   setFontScale(1.0);
   updateStatusText();
@@ -50,16 +49,17 @@ void ResizableAppItem::setBaseFontSize(int size) {
 }
 
 void ResizableAppItem::setFontScale(qreal scale) {
-  if (scale <= 0)
+  if (scale <= 0) {
     return;
+  }
   m_currentScale = scale;
-  QFont titleFont = m_titleText->font();
+  QFont titleFont = m_pTitleText->font();
   titleFont.setPointSizeF(static_cast<double>(m_baseFontSize) * scale);
   titleFont.setBold(true);
-  m_titleText->setFont(titleFont);
-  QFont statusFont = m_statusText->font();
+  m_pTitleText->setFont(titleFont);
+  QFont statusFont = m_pStatusText->font();
   statusFont.setPointSizeF((static_cast<double>(m_baseFontSize) * 0.6) * scale);
-  m_statusText->setFont(statusFont);
+  m_pStatusText->setFont(statusFont);
   updateStatusText();
 }
 
@@ -77,11 +77,12 @@ void ResizableAppItem::updateStatusText() {
   QPointF p = scenePos();
   QString status = QString("%1, %2 (%3x%4)").arg((int)p.x()).arg((int)p.y()).arg((int)rect().width()).arg((int)rect().height());
 
-  if (m_locked)
+  if (m_locked) {
     status += " [LOCKED]";
-  m_statusText->setPlainText(status);
-  qreal h = m_statusText->boundingRect().height();
-  m_statusText->setPos(5, rect().height() - h);
+  }
+  m_pStatusText->setPlainText(status);
+  qreal h = m_pStatusText->boundingRect().height();
+  m_pStatusText->setPos(5, rect().height() - h);
 }
 
 void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
@@ -97,11 +98,11 @@ void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
 
   if (selectedAction == lockAction) {
     setLocked(!m_locked);
-  } else if (selectedAction == raiseAction)
+  } else if (selectedAction == raiseAction) {
     setZValue(100);
-  else if (selectedAction == lowerAction)
+  } else if (selectedAction == lowerAction) {
     setZValue(-1);
-  else if (selectedAction == removeAction) {
+  } else if (selectedAction == removeAction) {
     if (scene()) {
       scene()->removeItem(this);
       delete this;
@@ -128,12 +129,14 @@ QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant&
     if (value.toBool()) {
       QColor selColor = m_locked ? QColor::fromRgba(Constants::Color::SelectionLocked) : QColor::fromRgba(Constants::Color::SelectionHighlight);
       setPen(QPen(selColor, 3));
-      if (!m_locked)
+      if (!m_locked) {
         setZValue(100);
+      }
     } else {
       setPen(QPen(Qt::black, 1));
-      if (!m_locked)
+      if (!m_locked) {
         setZValue(0);
+      }
     }
   }
 
@@ -168,12 +171,13 @@ void ResizableAppItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event) {
   }
   int handle = getHandleAt(event->pos());
   QCursor cursor = Qt::ArrowCursor;
-  if (handle == (Right | Bottom))
+  if (handle == (Right | Bottom)) {
     cursor = Qt::SizeFDiagCursor;
-  else if (handle & Right)
+  } else if (handle & Right) {
     cursor = Qt::SizeHorCursor;
-  else if (handle & Bottom)
+  } else if (handle & Bottom) {
     cursor = Qt::SizeVerCursor;
+  }
   setCursor(cursor);
   QGraphicsRectItem::hoverMoveEvent(event);
 }
@@ -194,14 +198,15 @@ void ResizableAppItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
 
   if (scene()) {
     LayoutScene* ls = dynamic_cast<LayoutScene*>(scene());
-    if (ls)
+    if (ls) {
       ls->clearSnapGuides();
+    }
 
     if (m_resizeHandle == None && !m_locked && parentItem() == nullptr) {
       QList<QGraphicsItem*> itemsUnderMouse = scene()->items(event->scenePos());
       for (QGraphicsItem* item : itemsUnderMouse) {
-        ZoneItem* zone = dynamic_cast<ZoneItem*>(item);
-        if (zone) {
+        if (item->type() == Constants::Item::ZoneItem) {
+          ZoneItem* zone = static_cast<ZoneItem*>(item);
           setRect(zone->rect());
           setPos(zone->pos());
           break;
@@ -213,8 +218,9 @@ void ResizableAppItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
 }
 
 void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
-  if (m_locked)
+  if (m_locked) {
     return;
+  }
 
   if (m_resizeHandle == None) {
     QGraphicsRectItem::mouseMoveEvent(event);
@@ -233,10 +239,12 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (parentItem()) {
       double newW = event->pos().x();
       double newH = event->pos().y();
-      if (newW < 50)
+      if (newW < 50) {
         newW = 50;
-      if (newH < 50)
+      }
+      if (newH < 50) {
         newH = 50;
+      }
       setRect(0, 0, newW, newH);
       return;
     }
@@ -298,24 +306,30 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 
     if (layoutScene && layoutScene->isGridEnabled()) {
       int gs = layoutScene->gridSize();
-      if (!snappedW && (m_resizeHandle & Right))
+      if (!snappedW && (m_resizeHandle & Right)) {
         proposedRight = SnappingUtils::snapToGridVal(proposedRight, gs);
-      if (!snappedH && (m_resizeHandle & Bottom))
+      }
+      if (!snappedH && (m_resizeHandle & Bottom)) {
         proposedBottom = SnappingUtils::snapToGridVal(proposedBottom, gs);
+      }
     }
 
     double newW = proposedRight - currentX;
     double newH = proposedBottom - currentY;
 
-    if (currentX + newW > validArea.right())
+    if (currentX + newW > validArea.right()) {
       newW = validArea.right() - currentX;
-    if (currentY + newH > validArea.bottom())
+    }
+    if (currentY + newH > validArea.bottom()) {
       newH = validArea.bottom() - currentY;
+    }
 
-    if (newW < 50)
+    if (newW < 50) {
       newW = 50;
-    if (newH < 50)
+    }
+    if (newH < 50) {
       newH = 50;
+    }
 
     setRect(0, 0, newW, newH);
     updateStatusText();
@@ -329,9 +343,11 @@ int ResizableAppItem::getHandleAt(const QPointF& pt) {
   QRectF r = rect();
   int handle = None;
   qreal margin = 15;
-  if (qAbs(pt.x() - r.right()) < margin)
+  if (qAbs(pt.x() - r.right()) < margin) {
     handle |= Right;
-  if (qAbs(pt.y() - r.bottom()) < margin)
+  }
+  if (qAbs(pt.y() - r.bottom()) < margin) {
     handle |= Bottom;
+  }
   return handle;
 }

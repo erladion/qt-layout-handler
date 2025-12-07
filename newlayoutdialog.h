@@ -19,9 +19,9 @@ private slots:
   void onPresetChanged(int index);
 
 private:
-  QComboBox* m_presetCombo;
-  QSpinBox* m_widthSpin;
-  QSpinBox* m_heightSpin;
+  QComboBox* m_pPresetCombo;
+  QSpinBox* m_pWidthSpin;
+  QSpinBox* m_pHeightSpin;
 };
 
 #endif  // NEWLAYOUTDIALOG_H

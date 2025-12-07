@@ -16,32 +16,32 @@ NewLayoutDialog::NewLayoutDialog(QWidget* parent) : QDialog(parent) {
   // Presets
   QHBoxLayout* presetLayout = new QHBoxLayout();
   presetLayout->addWidget(new QLabel("Preset:"));
-  m_presetCombo = new QComboBox();
-  m_presetCombo->addItem("1920 x 1080 (FHD)", QSize(1920, 1080));
-  m_presetCombo->addItem("1920 x 1200 (WUXGA)", QSize(1920, 1200));
-  m_presetCombo->addItem("2560 x 1440 (QHD)", QSize(2560, 1440));
-  m_presetCombo->addItem("3840 x 2160 (4K UHD)", QSize(3840, 2160));
-  m_presetCombo->addItem("Custom...", QSize(0, 0));
-  presetLayout->addWidget(m_presetCombo);
+  m_pPresetCombo = new QComboBox();
+  m_pPresetCombo->addItem("1920 x 1080 (FHD)", QSize(1920, 1080));
+  m_pPresetCombo->addItem("1920 x 1200 (WUXGA)", QSize(1920, 1200));
+  m_pPresetCombo->addItem("2560 x 1440 (QHD)", QSize(2560, 1440));
+  m_pPresetCombo->addItem("3840 x 2160 (4K UHD)", QSize(3840, 2160));
+  m_pPresetCombo->addItem("Custom...", QSize(0, 0));
+  presetLayout->addWidget(m_pPresetCombo);
   layout->addLayout(presetLayout);
 
   // Custom Dimensions
   QHBoxLayout* dimLayout = new QHBoxLayout();
 
-  m_widthSpin = new QSpinBox();
-  m_widthSpin->setRange(100, 10000);
-  m_widthSpin->setValue(1920);
-  m_widthSpin->setSuffix(" px");
+  m_pWidthSpin = new QSpinBox();
+  m_pWidthSpin->setRange(100, 10000);
+  m_pWidthSpin->setValue(1920);
+  m_pWidthSpin->setSuffix(" px");
 
-  m_heightSpin = new QSpinBox();
-  m_heightSpin->setRange(100, 10000);
-  m_heightSpin->setValue(1080);
-  m_heightSpin->setSuffix(" px");
+  m_pHeightSpin = new QSpinBox();
+  m_pHeightSpin->setRange(100, 10000);
+  m_pHeightSpin->setValue(1080);
+  m_pHeightSpin->setSuffix(" px");
 
   dimLayout->addWidget(new QLabel("Width:"));
-  dimLayout->addWidget(m_widthSpin);
+  dimLayout->addWidget(m_pWidthSpin);
   dimLayout->addWidget(new QLabel("Height:"));
-  dimLayout->addWidget(m_heightSpin);
+  dimLayout->addWidget(m_pHeightSpin);
   layout->addLayout(dimLayout);
 
   // Buttons
@@ -51,29 +51,29 @@ NewLayoutDialog::NewLayoutDialog(QWidget* parent) : QDialog(parent) {
   layout->addWidget(buttons);
 
   // Logic
-  connect(m_presetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &NewLayoutDialog::onPresetChanged);
+  connect(m_pPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &NewLayoutDialog::onPresetChanged);
 
   // Initial state (disable spins if preset selected)
   onPresetChanged(0);
 }
 
 void NewLayoutDialog::onPresetChanged(int index) {
-  QSize size = m_presetCombo->itemData(index).toSize();
+  QSize size = m_pPresetCombo->itemData(index).toSize();
   if (size.isValid() && !size.isEmpty()) {
-    m_widthSpin->setValue(size.width());
-    m_heightSpin->setValue(size.height());
-    m_widthSpin->setEnabled(false);
-    m_heightSpin->setEnabled(false);
+    m_pWidthSpin->setValue(size.width());
+    m_pHeightSpin->setValue(size.height());
+    m_pWidthSpin->setEnabled(false);
+    m_pHeightSpin->setEnabled(false);
   } else {
-    m_widthSpin->setEnabled(true);
-    m_heightSpin->setEnabled(true);
+    m_pWidthSpin->setEnabled(true);
+    m_pHeightSpin->setEnabled(true);
   }
 }
 
 int NewLayoutDialog::selectedWidth() const {
-  return m_widthSpin->value();
+  return m_pWidthSpin->value();
 }
 
 int NewLayoutDialog::selectedHeight() const {
-  return m_heightSpin->value();
+  return m_pHeightSpin->value();
 }

@@ -3,6 +3,8 @@
 
 #include <QGraphicsRectItem>
 
+#include "constants.h"
+
 class QGraphicsTextItem;
 
 class ZoneItem : public QGraphicsRectItem {
@@ -11,14 +13,12 @@ public:
 
   explicit ZoneItem(const QRectF& rect, QGraphicsItem* parent = nullptr);
 
-  int type() const override { return Type; }
-  enum { Type = UserType + 5 };
+  int type() const override { return Constants::Item::ZoneItem; }
 
 protected:
   void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
   QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
-  // Mouse events for resizing (similar to AppItem)
   void hoverMoveEvent(QGraphicsSceneHoverEvent* event) override;
   void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
   void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
@@ -29,9 +29,8 @@ private:
   void updateLabel();
 
   int m_resizeHandle;
-  QGraphicsTextItem* m_label;
+  QGraphicsTextItem* m_pLabel;
 
-  // State for undo (if we re-add it later) or snapping
   QPointF m_dragStartPos;
 };
 

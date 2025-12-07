@@ -5,14 +5,15 @@
 #include <QPen>
 #include <QPointF>
 
+#include "constants.h"
+
 class GuideLineItem : public QGraphicsLineItem {
 public:
   enum Orientation { Horizontal, Vertical };
 
   GuideLineItem(Orientation orientation, qreal pos, qreal length = 10000);
 
-  int type() const override { return Type; }
-  enum { Type = UserType + 10 };
+  int type() const override { return Constants::Item::GuideItem; }
 
   Orientation orientation() const { return m_orientation; }
 

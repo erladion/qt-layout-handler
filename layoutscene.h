@@ -14,9 +14,8 @@ class ResizableAppItem;
 
 class LayoutScene : public QGraphicsScene {
   Q_OBJECT
- public:
-  explicit LayoutScene(qreal x, qreal y, qreal w, qreal h,
-                       QObject* parent = nullptr);
+public:
+  explicit LayoutScene(qreal x, qreal y, qreal w, qreal h, QObject* parent = nullptr);
 
   bool isGridEnabled() const;
   int gridSize() const;
@@ -39,11 +38,10 @@ class LayoutScene : public QGraphicsScene {
 
   ResizableAppItem* addAppItem(const QString& name, const QRectF& rect);
 
-  // NEW: Snap Guide Management
   void setSnapGuides(const QList<QLineF>& guides);
   void clearSnapGuides();
 
- public slots:
+public slots:
   void alignSelectionLeft();
   void alignSelectionRight();
   void alignSelectionTop();
@@ -54,15 +52,13 @@ class LayoutScene : public QGraphicsScene {
   void distributeSelectionH();
   void distributeSelectionV();
 
- protected:
-  void drawBackground(QPainter* painter, const QRectF& rect) override;
-  // NEW: Draw snap lines on top
+protected:
   void drawForeground(QPainter* painter, const QRectF& rect) override;
 
- private slots:
+private slots:
   void onGridCalculationFinished();
 
- private:
+private:
   void triggerGridUpdate();
 
   bool m_gridEnabled;
@@ -70,12 +66,11 @@ class LayoutScene : public QGraphicsScene {
   int m_topBarHeight;
   int m_bottomBarHeight;
 
-  QGraphicsRectItem* m_bgItem;
+  QGraphicsRectItem* m_pBgItem;
 
   QFutureWatcher<QVector<QLineF>> m_gridWatcher;
   QVector<QLineF> m_cachedGridLines;
 
-  // NEW: Active snap lines to render
   QList<QLineF> m_snapGuides;
 };
 

@@ -8,7 +8,7 @@
 #include "layoutscene.h"
 #include "snappingutils.h"
 
-SnappingItemGroup::SnappingItemGroup(LayoutScene* scene, QGraphicsItem* parent) : QGraphicsItemGroup(parent), m_layoutScene(scene) {
+SnappingItemGroup::SnappingItemGroup(LayoutScene* scene, QGraphicsItem* parent) : QGraphicsItemGroup(parent), m_pLayoutScene(scene) {
   setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemSendsGeometryChanges);
 }
 
@@ -40,10 +40,10 @@ void SnappingItemGroup::paint(QPainter* painter, const QStyleOptionGraphicsItem*
 }
 
 QVariant SnappingItemGroup::itemChange(GraphicsItemChange change, const QVariant& value) {
-  if (change == ItemPositionChange && m_layoutScene) {
+  if (change == ItemPositionChange && m_pLayoutScene) {
     QList<QLineF> guides;
-    QPointF newPos = SnappingUtils::snapPosition(m_layoutScene, this, value.toPointF(), boundingRect(), &guides);
-    m_layoutScene->setSnapGuides(guides);
+    QPointF newPos = SnappingUtils::snapPosition(m_pLayoutScene, this, value.toPointF(), boundingRect(), &guides);
+    m_pLayoutScene->setSnapGuides(guides);
     return newPos;
   }
   return QGraphicsItemGroup::itemChange(change, value);
@@ -51,6 +51,7 @@ QVariant SnappingItemGroup::itemChange(GraphicsItemChange change, const QVariant
 
 void SnappingItemGroup::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
   QGraphicsItemGroup::mouseReleaseEvent(event);
-  if (m_layoutScene)
-    m_layoutScene->clearSnapGuides();
+  if (m_pLayoutScene) {
+    m_pLayoutScene->clearSnapGuides();
+  }
 }

@@ -11,23 +11,20 @@ class QVBoxLayout;
 class QGridLayout;
 class QLabel;
 class RibbonSection;
-class QStackedLayout;  // NEW
+class QStackedLayout;
 
-// --- 1. Custom Ribbon Button ---
 class RibbonButton : public QToolButton {
   Q_OBJECT
 public:
   enum Type { Large, Small };
   explicit RibbonButton(QAction* action, Type type, QWidget* parent = nullptr);
 
-  // Helper to switch visual style dynamically
   void setCompactMode(bool compact);
 
 private:
   Type m_type;
 };
 
-// --- 2. Ribbon Section ---
 class RibbonSection : public QWidget {
   Q_OBJECT
 public:
@@ -50,7 +47,6 @@ public:
 
 protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
-  // Manual painting to avoid stylesheet inheritance issues
   void paintEvent(QPaintEvent* event) override;
 
 private slots:
@@ -64,29 +60,27 @@ private:
   QIcon m_sectionIcon;
   Mode m_mode;
 
-  // REFACTORED: Stacked Layout for switching between content and collapsed icon
-  QStackedLayout* m_stackLayout;
+  QStackedLayout* m_pStackLayout;
 
   // Expanded View (Content + Title)
-  QWidget* m_expandedWidget;
-  QVBoxLayout* m_expandedLayout;
+  QWidget* m_pExpandedWidget;
+  QVBoxLayout* m_pExpandedLayout;
 
   // Collapsed View (Centered Icon)
-  QWidget* m_collapsedWidget;
+  QWidget* m_pCollapsedWidget;
 
-  QWidget* m_contentWidget;
-  QGridLayout* m_contentGrid;
+  QWidget* m_pContentWidget;
+  QGridLayout* m_pContentGrid;
 
-  QLabel* m_titleLbl;
-  QToolButton* m_collapsedBtn;
+  QLabel* m_pTitleLabel;
+  QToolButton* m_pCollapsedButton;
 
-  QWidget* m_popupWidget;
+  QWidget* m_pPopupWidget;
   int m_gridColCount;
 
   QIcon m_representativeIcon;
 };
 
-// --- 3. Main Office Toolbar ---
 class OfficeToolbar : public QWidget {
   Q_OBJECT
 public:
@@ -99,13 +93,12 @@ public:
 
 protected:
   void resizeEvent(QResizeEvent* event) override;
-  // Manual painting for background and bottom border
   void paintEvent(QPaintEvent* event) override;
 
 private:
   void layoutSections();
 
-  QHBoxLayout* m_layout;
+  QHBoxLayout* m_pLayout;
   QList<RibbonSection*> m_sections;
 };
 

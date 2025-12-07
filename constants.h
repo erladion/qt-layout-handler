@@ -4,6 +4,8 @@
 #include <QColor>
 #include <QString>
 
+#include <QGraphicsItem>
+
 namespace Constants {
 // Timings (ms)
 constexpr int StatusMessageDuration = 3000;
@@ -20,6 +22,16 @@ constexpr int RibbonHeight = 100;
 constexpr int PropertiesDialogWidth = 200;
 constexpr int PropertiesDialogHeight = 220;
 constexpr qreal GuideHandleSize = 20.0;
+
+namespace Item {
+enum Types {
+  AppItem = QGraphicsItem::UserType + 1,
+  ZoneItem = QGraphicsItem::UserType + 2,
+  GroupItem = QGraphicsItem::UserType + 3,
+  GuideItem = QGraphicsItem::UserType + 4,
+  Artboard = QGraphicsItem::UserType + 5
+};
+}
 
 // Colors (POD types)
 namespace Color {
