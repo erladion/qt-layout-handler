@@ -87,10 +87,6 @@ void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
     if (droppedInView || clickedInRuler) {
       QPointF dropScenePos = m_view->mapToScene(event->pos());
 
-      // Logic Update:
-      // Click Top Ruler (Horizontal) -> Get Vertical Line at X
-      // Click Left Ruler (Vertical) -> Get Horizontal Line at Y
-
       GuideLineItem::Orientation guideOri;
       qreal pos;
 
@@ -105,7 +101,11 @@ void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
       }
 
       GuideLineItem* guide = new GuideLineItem(guideOri, pos);
-      m_view->scene()->addItem(guide);
+
+      // REVERT: Direct add to scene (No Undo Command)
+      if (m_view->scene()) {
+        m_view->scene()->addItem(guide);
+      }
     }
 
     m_dragging = false;
@@ -150,17 +150,13 @@ void RulerBar::paintEvent(QPaintEvent* event) {
   else if (scale < 0.2)
     step = 500;
 
-  // FIX: Use integer loop counter
-  // Determine number of steps to draw
   double firstTick = std::floor(start / step) * step;
   int numTicks = std::ceil((end - firstTick) / step);
 
   for (int i = 0; i <= numTicks; ++i) {
-    // Calculate v based on index to ensure precision
     double v = firstTick + (i * step);
-
     if (v > end)
-      break;  // Safety break
+      break;
 
     QPointF widgetPt;
     if (m_orientation == Horizontal)
@@ -170,8 +166,6 @@ void RulerBar::paintEvent(QPaintEvent* event) {
 
     int pos = (m_orientation == Horizontal) ? widgetPt.x() : widgetPt.y();
 
-    // Simple culling if mapFromScene returns something way off (though loop handles logic)
-    // Draw Ticks
     if (m_orientation == Horizontal) {
       p.drawLine(pos, 15, pos, 25);
       p.drawText(pos + 2, 12, QString::number((int)v));

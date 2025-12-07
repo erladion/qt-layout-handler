@@ -11,7 +11,7 @@
 #include <QPen>
 #include <cmath>
 #include "layoutscene.h"
-#include "settingsdialog.h"  // NEW: Read settings
+#include "settingsdialog.h"
 #include "snappingutils.h"
 #include "zoneitem.h"
 
@@ -24,21 +24,16 @@ ResizableAppItem::ResizableAppItem(const QString& appName, const QRectF& rect)
   setBrush(QBrush(QColor(60, 60, 60, 200)));
   setPen(QPen(Qt::black, 1));
 
-  // Initialize Base Font Size from Settings
   m_baseFontSize = SettingsDialog::getAppFontSize();
 
-  // Title Text
   m_titleText = new QGraphicsTextItem(appName, this);
   m_titleText->setDefaultTextColor(Qt::lightGray);
   m_titleText->setPos(5, 5);
 
-  // Status Text
   m_statusText = new QGraphicsTextItem("", this);
   m_statusText->setDefaultTextColor(QColor(200, 200, 200));
 
-  // Apply Initial Fonts
   setFontScale(1.0);
-
   updateStatusText();
 }
 
@@ -46,29 +41,22 @@ QString ResizableAppItem::name() const {
   return m_name;
 }
 
-// NEW: Helper to update base size and re-apply scale
 void ResizableAppItem::setBaseFontSize(int size) {
   m_baseFontSize = size;
-  setFontScale(m_currentScale);  // Re-apply with new base
+  setFontScale(m_currentScale);
 }
 
 void ResizableAppItem::setFontScale(qreal scale) {
   if (scale <= 0)
     return;
   m_currentScale = scale;
-
-  // Scale Title (Base from settings)
   QFont titleFont = m_titleText->font();
   titleFont.setPointSizeF(static_cast<double>(m_baseFontSize) * scale);
   titleFont.setBold(true);
   m_titleText->setFont(titleFont);
-
-  // Scale Status/Location Text (Base ~60% of title)
   QFont statusFont = m_statusText->font();
   statusFont.setPointSizeF((static_cast<double>(m_baseFontSize) * 0.6) * scale);
   m_statusText->setFont(statusFont);
-
-  // Force re-calculation of text position
   updateStatusText();
 }
 
@@ -87,13 +75,10 @@ void ResizableAppItem::updateStatusText() {
   if (m_locked)
     status += " [LOCKED]";
   m_statusText->setPlainText(status);
-
-  // Adjust position based on new font height
   qreal h = m_statusText->boundingRect().height();
   m_statusText->setPos(5, rect().height() - h);
 }
 
-// ... Context Menu ...
 void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
   QMenu menu;
   QAction* lockAction = menu.addAction(m_locked ? "Unlock" : "Lock");
@@ -119,7 +104,6 @@ void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
   }
 }
 
-// ... Paint ...
 void ResizableAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
   QGraphicsRectItem::paint(painter, option, widget);
   if (m_locked) {
@@ -134,7 +118,6 @@ void ResizableAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
   }
 }
 
-// ... Item Change ...
 QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant& value) {
   if (change == ItemSelectedHasChanged) {
     if (value.toBool()) {
@@ -246,27 +229,13 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     bool snappedW = false;
     bool snappedH = false;
 
-    // Use SnappingUtils helper
+    // REFACTORED: Use shared SnappingUtils for candidate query and snapping logic
     QRectF queryRect(currentX, currentY, proposedRight - currentX, proposedBottom - currentY);
     QList<QGraphicsItem*> candidates = SnappingUtils::getSnappingCandidates(layoutScene, queryRect, this);
 
     if (m_resizeHandle & Right) {
-      for (QGraphicsItem* item : candidates) {
-        QRectF other = item->mapRectToScene(item->boundingRect());
+      proposedRight = SnappingUtils::snapValueToCandidates(proposedRight, currentY, rect().height(), candidates, Qt::Horizontal, snappedW);
 
-        if (SnappingUtils::rangesOverlap(currentY, rect().height(), other.top(), other.height())) {
-          if (SnappingUtils::isClose(proposedRight, other.left())) {
-            proposedRight = other.left();
-            snappedW = true;
-            break;
-          }
-          if (SnappingUtils::isClose(proposedRight, other.right())) {
-            proposedRight = other.right();
-            snappedW = true;
-            break;
-          }
-        }
-      }
       if (!snappedW && SnappingUtils::isClose(proposedRight, validArea.right())) {
         proposedRight = validArea.right();
         snappedW = true;
@@ -274,22 +243,8 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     }
 
     if (m_resizeHandle & Bottom) {
-      for (QGraphicsItem* item : candidates) {
-        QRectF other = item->mapRectToScene(item->boundingRect());
+      proposedBottom = SnappingUtils::snapValueToCandidates(proposedBottom, currentX, rect().width(), candidates, Qt::Vertical, snappedH);
 
-        if (SnappingUtils::rangesOverlap(currentX, rect().width(), other.left(), other.width())) {
-          if (SnappingUtils::isClose(proposedBottom, other.top())) {
-            proposedBottom = other.top();
-            snappedH = true;
-            break;
-          }
-          if (SnappingUtils::isClose(proposedBottom, other.bottom())) {
-            proposedBottom = other.bottom();
-            snappedH = true;
-            break;
-          }
-        }
-      }
       if (!snappedH && SnappingUtils::isClose(proposedBottom, validArea.bottom())) {
         proposedBottom = validArea.bottom();
         snappedH = true;

@@ -17,10 +17,7 @@ public:
 
   void updateStatusText();
 
-  // Scale fonts based on layout size
   void setFontScale(qreal scale);
-
-  // NEW: Update the base font size (e.g. from settings)
   void setBaseFontSize(int size);
 
 protected:
@@ -43,7 +40,6 @@ private:
   QGraphicsTextItem* m_statusText;
   bool m_locked;
 
-  // NEW: Font management vars
   int m_baseFontSize;
   qreal m_currentScale;
 };

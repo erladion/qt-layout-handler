@@ -39,7 +39,7 @@
 #include <algorithm>
 #include <cmath>
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), scene(nullptr), m_isModified(false) {
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), scene(nullptr), m_toolbar(nullptr), m_isModified(false) {
   resize(1400, 900);
   setWindowTitle("Layout Manager");
 
@@ -105,7 +105,6 @@ MainWindow::~MainWindow() {
   }
 }
 
-// RESTORED: Close Event to handle unsaved changes
 void MainWindow::closeEvent(QCloseEvent* event) {
   if (maybeSave()) {
     event->accept();
@@ -114,7 +113,6 @@ void MainWindow::closeEvent(QCloseEvent* event) {
   }
 }
 
-// RESTORED: Helper to handle unsaved changes logic
 bool MainWindow::maybeSave() {
   if (!m_isModified)
     return true;
@@ -135,7 +133,6 @@ bool MainWindow::maybeSave() {
   return true;
 }
 
-// RESTORED: Update window title and state
 void MainWindow::setModified(bool modified) {
   m_isModified = modified;
   QString title = "Layout Manager";
@@ -143,6 +140,13 @@ void MainWindow::setModified(bool modified) {
     title += " *";
   }
   setWindowTitle(title);
+}
+
+void MainWindow::connectSceneSignals() {
+  if (!scene)
+    return;
+  connect(scene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
+  connect(scene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
 }
 
 void MainWindow::updateInterfaceState() {
@@ -168,7 +172,6 @@ void MainWindow::updateInterfaceState() {
 }
 
 void MainWindow::newLayout() {
-  // Check for unsaved changes before destroying current scene
   if (!maybeSave())
     return;
 
@@ -184,16 +187,17 @@ void MainWindow::newLayout() {
     scene = new LayoutScene(0, 0, w, h, this);
     scene->setItemIndexMethod(QGraphicsScene::NoIndex);
 
-    // Use settings defaults
     scene->setTopBarHeight(SettingsDialog::getTopBarHeight());
     scene->setBottomBarHeight(SettingsDialog::getBottomBarHeight());
 
-    connect(scene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
-    connect(scene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
+    connectSceneSignals();
 
     view->setScene(scene);
     updateInterfaceState();
     setModified(false);
+
+    // FIX: createToolbar handles the deletion safely at the start now
+    createToolbar();
 
     view->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
     statusBar()->showMessage(QString("Created new layout: %1x%2").arg(w).arg(h));
@@ -201,7 +205,6 @@ void MainWindow::newLayout() {
 }
 
 void MainWindow::closeLayout() {
-  // Check for unsaved changes
   if (!maybeSave())
     return;
   if (!scene)
@@ -216,14 +219,13 @@ void MainWindow::closeLayout() {
     m_propDialog->setItem(nullptr);
 
   updateInterfaceState();
-  setModified(false);  // Reset state
+  setModified(false);
   statusBar()->showMessage("Layout closed.");
 }
 
 void MainWindow::openSettings() {
   SettingsDialog dlg(this);
   if (dlg.exec() == QDialog::Accepted) {
-    // Refresh all items in scene if font size changed
     if (scene) {
       int newSize = SettingsDialog::getAppFontSize();
       for (auto item : scene->items()) {
@@ -369,8 +371,11 @@ void MainWindow::addZone() {
     return;
   ZoneItem* zone = new ZoneItem(QRectF(0, 0, 400, 400));
   QRectF safe = scene->getWorkingArea();
-  zone->setPos(safe.center().x() - 200, safe.center().y() - 200);
+  int startX = safe.left() + 50;
+  int startY = safe.top() + 50;
+  zone->setPos(startX, startY);
   scene->addItem(zone);
+
   statusBar()->showMessage("Zone added.", 3000);
 }
 
@@ -378,9 +383,15 @@ void MainWindow::removeWindow() {
   if (!scene)
     return;
   QList<QGraphicsItem*> selected = scene->selectedItems();
+
+  if (selected.isEmpty())
+    return;
+
   for (auto item : selected) {
-    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item) || dynamic_cast<QGraphicsItemGroup*>(item) ||
-        dynamic_cast<GuideLineItem*>(item)) {
+    if (dynamic_cast<ResizableAppItem*>(item) || dynamic_cast<ZoneItem*>(item)) {
+      scene->removeItem(item);
+      delete item;
+    } else {
       scene->removeItem(item);
       delete item;
     }
@@ -391,9 +402,11 @@ void MainWindow::groupItems() {
   if (!scene)
     return;
   QList<QGraphicsItem*> selected = scene->selectedItems();
-  SnappingItemGroup* existingGroup = nullptr;
+
   QList<QGraphicsItem*> itemsToGroup;
+  SnappingItemGroup* existingGroup = nullptr;
   int groupCount = 0;
+
   for (QGraphicsItem* item : selected) {
     if (SnappingItemGroup* grp = dynamic_cast<SnappingItemGroup*>(item)) {
       existingGroup = grp;
@@ -402,6 +415,7 @@ void MainWindow::groupItems() {
       itemsToGroup.append(item);
     }
   }
+
   if (groupCount == 1 && !itemsToGroup.isEmpty()) {
     for (QGraphicsItem* item : itemsToGroup) {
       item->setSelected(false);
@@ -411,16 +425,19 @@ void MainWindow::groupItems() {
     statusBar()->showMessage("Added item(s) to existing group.", 2000);
     return;
   }
-  if (itemsToGroup.size() < 2)
-    return;
-  SnappingItemGroup* group = new SnappingItemGroup(scene);
-  for (QGraphicsItem* item : itemsToGroup) {
-    item->setSelected(false);
-    group->addToGroup(item);
+
+  if (itemsToGroup.size() >= 2) {
+    SnappingItemGroup* group = new SnappingItemGroup(scene);
+    for (QGraphicsItem* item : itemsToGroup) {
+      item->setSelected(false);
+      group->addToGroup(item);
+    }
+    scene->addItem(group);
+    group->setSelected(true);
+    statusBar()->showMessage("Items grouped.", 2000);
+  } else {
+    statusBar()->showMessage("Select at least 2 items to group.", 2000);
   }
-  scene->addItem(group);
-  group->setSelected(true);
-  statusBar()->showMessage("Items grouped.", 2000);
 }
 
 void MainWindow::ungroupItems() {
@@ -429,14 +446,16 @@ void MainWindow::ungroupItems() {
   QList<QGraphicsItem*> selected = scene->selectedItems();
   if (selected.isEmpty())
     return;
-  int count = 0;
+
+  bool any = false;
   for (auto item : selected) {
-    if (QGraphicsItemGroup* group = dynamic_cast<QGraphicsItemGroup*>(item)) {
+    if (SnappingItemGroup* group = dynamic_cast<SnappingItemGroup*>(item)) {
       scene->destroyItemGroup(group);
-      count++;
+      any = true;
     }
   }
-  if (count > 0)
+
+  if (any)
     statusBar()->showMessage("Ungrouped items.", 2000);
 }
 
@@ -487,7 +506,6 @@ void MainWindow::applyTemplate(QAction* action) {
   }
 }
 
-// RESTORED: bool return type
 bool MainWindow::saveLayout() {
   if (!scene)
     return false;
@@ -543,7 +561,19 @@ void MainWindow::createMenuBar() {
 }
 
 void MainWindow::createToolbar() {
+  // FIX: Safely remove old toolbar before creating new one.
+  // This prevents segfaults where we try to add a new toolbar while the old one
+  // is still partially active or referenced.
+  if (m_toolbar) {
+    removeToolBar(m_toolbar);
+    delete m_toolbar;
+    m_toolbar = nullptr;
+  }
+
   OfficeToolbar* ribbon = new OfficeToolbar(this);
+  m_toolbar = addToolBar("Ribbon");
+  m_toolbar->setMovable(false);
+  m_toolbar->addWidget(ribbon);
 
   QString controlStyle = R"(
       QMenu {
@@ -566,7 +596,7 @@ void MainWindow::createToolbar() {
   // --- SECTION: FILE ---
   RibbonSection* fileSec = ribbon->addSection("File", QIcon(":/icons/section-file.svg"));
 
-  QAction* newAct = new QAction(QIcon(":/icons/add.svg"), "New", this);
+  QAction* newAct = new QAction(QIcon(":/icons/add.svg"), "New", this);  // Parent to this/ribbon
   newAct->setShortcut(QKeySequence::New);
   connect(newAct, &QAction::triggered, this, &MainWindow::newLayout);
   fileSec->addLargeButton(new RibbonButton(newAct, RibbonButton::Large));
@@ -758,8 +788,4 @@ void MainWindow::createToolbar() {
   m_secView->addWidget(botContainer, 1, 1);
 
   ribbon->addSpacer();
-
-  QToolBar* tb = addToolBar("Ribbon");
-  tb->setMovable(false);
-  tb->addWidget(ribbon);
 }

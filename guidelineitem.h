@@ -3,6 +3,7 @@
 
 #include <QGraphicsLineItem>
 #include <QPen>
+#include <QPointF>
 
 class GuideLineItem : public QGraphicsLineItem {
 public:
@@ -15,7 +16,6 @@ public:
 
   Orientation orientation() const { return m_orientation; }
 
-  // FIX: Override boundingRect to include the custom painted arrows
   QRectF boundingRect() const override;
 
 protected:

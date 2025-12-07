@@ -47,9 +47,6 @@ private slots:
   void setWallpaper();
   void applyTemplate(QAction* action);
 
-  // Settings
-  void openSettings();  // NEW
-
   // Feature 6 & 7 Slots
   void toggleLock();
   void groupItems();
@@ -60,6 +57,9 @@ private slots:
   void onSelectionChanged();
   void onSceneChanged(const QList<QRectF>& region);
 
+  // Settings
+  void openSettings();
+
 private:
   void createToolbar();
   void createMenuBar();
@@ -67,6 +67,9 @@ private:
   void updateInterfaceState();
   bool maybeSave();
   void setModified(bool modified);
+
+  // Helper to connect scene specific signals (Selection, Changes)
+  void connectSceneSignals();
 
   QString getTemplateXml(const QString& name);
 
@@ -82,6 +85,9 @@ private:
   // Properties Window
   PropertiesDialog* m_propDialog;
   QAction* m_viewPropAct;
+
+  // Toolbar Tracking
+  QToolBar* m_toolbar;
 
   // Ribbon Sections
   RibbonSection* m_secInsert;

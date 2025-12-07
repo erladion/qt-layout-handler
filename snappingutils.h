@@ -4,6 +4,7 @@
 #include <QList>
 #include <QPointF>
 #include <QRectF>
+#include <Qt>  // For Qt::Orientation
 
 class LayoutScene;
 class QGraphicsItem;
@@ -18,9 +19,15 @@ public:
   static QList<QGraphicsItem*> getSnappingCandidates(LayoutScene* scene, const QRectF& queryRect, QGraphicsItem* ignoreItem);
 
   static bool isSnappableItem(QGraphicsItem* item);
-
-  // NEW: Exposed helper for distance checking
   static bool isClose(double value, double target);
+
+  // NEW: Centralized logic for snapping a single edge (for Resizing)
+  static double snapValueToCandidates(double proposedValue,
+                                      double orthoStart,
+                                      double orthoLength,
+                                      const QList<QGraphicsItem*>& candidates,
+                                      Qt::Orientation snapAxis,
+                                      bool& outSnapped);
 
   static constexpr double SNAP_DIST = 15.0;
 };

@@ -8,7 +8,7 @@
 #include <QPixmap>
 #include <QVector>
 
-class ResizableAppItem;  // Forward declaration
+class ResizableAppItem;
 
 class LayoutScene : public QGraphicsScene {
   Q_OBJECT
@@ -32,10 +32,9 @@ public:
   QRectF getWorkingArea() const;
   const QVector<QLineF>& gridLines() const { return m_cachedGridLines; }
 
-  // --- ITEM MANAGEMENT ---
   void clearLayout();
 
-  // NEW: Factory method to centralize item creation
+  // Reverted to direct add helper
   ResizableAppItem* addAppItem(const QString& name, const QRectF& rect);
 
 public slots:
