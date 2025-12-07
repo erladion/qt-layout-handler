@@ -8,6 +8,8 @@
 #include <QLabel>
 #include <QMainWindow>
 #include <QSlider>
+#include <QSpinBox>
+
 #include "snappingitemgroup.h"
 
 class LayoutScene;
@@ -18,16 +20,16 @@ class RibbonSection;
 class MainWindow : public QMainWindow {
   Q_OBJECT
 
-public:
+ public:
   explicit MainWindow(QWidget* parent = nullptr);
   ~MainWindow();
 
-protected:
+ protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
 
-private slots:
+ private slots:
   // UI Slots
   void toggleGrid(bool checked);
   void onGridSizeChanged(int val);
@@ -60,7 +62,7 @@ private slots:
   // Settings
   void openSettings();
 
-private:
+ private:
   void createToolbar();
   void createMenuBar();
   void updateRulers();
@@ -68,7 +70,7 @@ private:
   bool maybeSave();
   void setModified(bool modified);
 
-  // Helper to connect scene specific signals (Selection, Changes)
+  // Helper to connect scene specific signals
   void connectSceneSignals();
 
   QString getTemplateXml(const QString& name);
@@ -78,9 +80,14 @@ private:
 
   RulerBar* m_hRuler;
   RulerBar* m_vRuler;
+  QWidget* m_corner;  // Added m_corner to track visibility
 
   QSlider* gridSlider;
   QLabel* gridLabel;
+
+  // Spinboxes for Top/Bottom bar height (Restored)
+  QSpinBox* m_topBarSpin;
+  QSpinBox* m_botBarSpin;
 
   // Properties Window
   PropertiesDialog* m_propDialog;

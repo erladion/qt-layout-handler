@@ -1,10 +1,13 @@
 #include "guidelineitem.h"
+
 #include <QCursor>
 #include <QGraphicsScene>
 #include <QPainter>
 
-GuideLineItem::GuideLineItem(Orientation orientation, qreal pos, qreal length) : m_orientation(orientation) {
-  setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemSendsScenePositionChanges);
+GuideLineItem::GuideLineItem(Orientation orientation, qreal pos, qreal length)
+    : m_orientation(orientation) {
+  setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable |
+           QGraphicsItem::ItemSendsScenePositionChanges);
 
   QPen pen(QColor(0, 255, 255));
   pen.setStyle(Qt::DashLine);
@@ -31,7 +34,9 @@ QRectF GuideLineItem::boundingRect() const {
   return rect.united(handleRect);
 }
 
-void GuideLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
+void GuideLineItem::paint(QPainter *painter,
+                          const QStyleOptionGraphicsItem *option,
+                          QWidget *widget) {
   Q_UNUSED(option);
   Q_UNUSED(widget);
 
@@ -56,8 +61,17 @@ void GuideLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* opt
   }
 }
 
-QVariant GuideLineItem::itemChange(GraphicsItemChange change, const QVariant& value) {
+QVariant GuideLineItem::itemChange(GraphicsItemChange change,
+                                   const QVariant &value) {
   if (change == ItemPositionChange && scene()) {
+    // FIX: Prevent guide from moving if it is selected but not being directly
+    // dragged (i.e., part of a rubber band selection move) We check if a mouse
+    // grabber exists and if it is NOT us.
+    if (isSelected() && scene()->mouseGrabberItem() &&
+        scene()->mouseGrabberItem() != this) {
+      return pos();  // Reject the new position, stay put
+    }
+
     QPointF newPos = value.toPointF();
     if (m_orientation == Horizontal) {
       newPos.setX(0);

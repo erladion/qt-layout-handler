@@ -1,9 +1,4 @@
 #include "layoutscene.h"
-#include "guidelineitem.h"
-#include "resizableappitem.h"
-#include "snappingitemgroup.h"
-#include "snappingutils.h"
-#include "zoneitem.h"
 
 #include <QGraphicsRectItem>
 #include <QLineF>
@@ -13,11 +8,19 @@
 #include <algorithm>
 #include <cmath>
 
-static QList<QGraphicsItem*> getAlignableItems(const QList<QGraphicsItem*>& selection) {
+#include "guidelineitem.h"
+#include "resizableappitem.h"
+#include "snappingitemgroup.h"
+#include "snappingutils.h"
+#include "zoneitem.h"
+
+static QList<QGraphicsItem*> getAlignableItems(
+    const QList<QGraphicsItem*>& selection) {
   QList<QGraphicsItem*> valid;
   valid.reserve(selection.size());
   for (auto item : selection) {
-    if (SnappingUtils::isSnappableItem(item) || dynamic_cast<GuideLineItem*>(item)) {
+    if (SnappingUtils::isSnappableItem(item) ||
+        dynamic_cast<GuideLineItem*>(item)) {
       valid.append(item);
     }
   }
@@ -25,7 +28,7 @@ static QList<QGraphicsItem*> getAlignableItems(const QList<QGraphicsItem*>& sele
 }
 
 class WorkspaceItem : public QGraphicsRectItem {
-public:
+ public:
   WorkspaceItem(const QRectF& rect) : QGraphicsRectItem(rect) {
     setZValue(-1000);
     setAcceptedMouseButtons(Qt::NoButton);
@@ -37,13 +40,13 @@ public:
     update();
   }
 
-  void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override {
+  void paint(QPainter* painter, const QStyleOptionGraphicsItem* option,
+             QWidget* widget) override {
     Q_UNUSED(option);
     Q_UNUSED(widget);
 
     LayoutScene* layoutScene = dynamic_cast<LayoutScene*>(scene());
-    if (!layoutScene)
-      return;
+    if (!layoutScene) return;
 
     QRectF fullRect = rect();
 
@@ -67,15 +70,25 @@ public:
     auto drawBar = [&](const QRectF& barRect, const QString& label) {
       painter->fillRect(barRect, QBrush(Qt::black));
       painter->setPen(Qt::white);
-      painter->drawText(barRect.adjusted(10, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft, label);
+
+      QFont font = painter->font();
+      int pixelSize = qMax(10, static_cast<int>(barRect.height() * 0.5));
+      font.setPixelSize(pixelSize);
+      painter->setFont(font);
+
+      painter->drawText(barRect.adjusted(10, 0, 0, 0),
+                        Qt::AlignVCenter | Qt::AlignLeft, label);
     };
 
     if (topH > 0) {
-      drawBar(QRectF(fullRect.left(), fullRect.top(), fullRect.width(), topH), "Top Bar");
+      drawBar(QRectF(fullRect.left(), fullRect.top(), fullRect.width(), topH),
+              "Top Bar");
     }
 
     if (botH > 0) {
-      drawBar(QRectF(fullRect.left(), fullRect.bottom() - botH, fullRect.width(), botH), "Bottom Bar");
+      drawBar(QRectF(fullRect.left(), fullRect.bottom() - botH,
+                     fullRect.width(), botH),
+              "Bottom Bar");
     }
 
     QPen borderPen(Qt::white, 2);
@@ -85,13 +98,14 @@ public:
     painter->drawRect(fullRect);
   }
 
-private:
+ private:
   QPixmap m_wallpaper;
 };
 
 static QVector<QLineF> calculateGridLines(int gridSize, QRectF workArea) {
   QVector<QLineF> lines;
-  int estimated = (workArea.width() / gridSize) + (workArea.height() / gridSize) + 2;
+  int estimated =
+      (workArea.width() / gridSize) + (workArea.height() / gridSize) + 2;
   lines.reserve(estimated);
 
   long long startXIndex = std::ceil(workArea.left() / (double)gridSize);
@@ -116,21 +130,23 @@ static QVector<QLineF> calculateGridLines(int gridSize, QRectF workArea) {
 }
 
 LayoutScene::LayoutScene(qreal x, qreal y, qreal w, qreal h, QObject* parent)
-    : QGraphicsScene(parent), m_gridEnabled(false), m_gridSize(50), m_topBarHeight(0), m_bottomBarHeight(0), m_bgItem(nullptr) {
+    : QGraphicsScene(parent),
+      m_gridEnabled(false),
+      m_gridSize(50),
+      m_topBarHeight(0),
+      m_bottomBarHeight(0),
+      m_bgItem(nullptr) {
   setSceneRect(x, y, w, h);
   WorkspaceItem* bg = new WorkspaceItem(QRectF(x, y, w, h));
   addItem(bg);
   m_bgItem = bg;
 
-  connect(&m_gridWatcher, &QFutureWatcher<QVector<QLineF>>::finished, this, &LayoutScene::onGridCalculationFinished);
+  connect(&m_gridWatcher, &QFutureWatcher<QVector<QLineF>>::finished, this,
+          &LayoutScene::onGridCalculationFinished);
 }
 
-bool LayoutScene::isGridEnabled() const {
-  return m_gridEnabled;
-}
-int LayoutScene::gridSize() const {
-  return m_gridSize;
-}
+bool LayoutScene::isGridEnabled() const { return m_gridEnabled; }
+int LayoutScene::gridSize() const { return m_gridSize; }
 
 void LayoutScene::setGridEnabled(bool enabled) {
   m_gridEnabled = enabled;
@@ -159,26 +175,38 @@ void LayoutScene::setWallpaper(const QPixmap& pix) {
 }
 
 QRectF LayoutScene::getWorkingArea() const {
-  return QRectF(sceneRect().left(), sceneRect().top() + m_topBarHeight, sceneRect().width(),
+  return QRectF(sceneRect().left(), sceneRect().top() + m_topBarHeight,
+                sceneRect().width(),
                 sceneRect().height() - m_topBarHeight - m_bottomBarHeight);
+}
+
+void LayoutScene::setSnapGuides(const QList<QLineF>& guides) {
+  m_snapGuides = guides;
+  update();
+}
+
+void LayoutScene::clearSnapGuides() {
+  if (!m_snapGuides.isEmpty()) {
+    m_snapGuides.clear();
+    update();
+  }
 }
 
 void LayoutScene::triggerGridUpdate() {
   if (m_gridEnabled) {
-    QFuture<QVector<QLineF>> future = QtConcurrent::run(calculateGridLines, m_gridSize, getWorkingArea());
+    QFuture<QVector<QLineF>> future =
+        QtConcurrent::run(calculateGridLines, m_gridSize, getWorkingArea());
     m_gridWatcher.setFuture(future);
   } else {
     m_cachedGridLines.clear();
-    if (m_bgItem)
-      m_bgItem->update();
+    if (m_bgItem) m_bgItem->update();
     update();
   }
 }
 
 void LayoutScene::onGridCalculationFinished() {
   m_cachedGridLines = m_gridWatcher.result();
-  if (m_bgItem)
-    m_bgItem->update();
+  if (m_bgItem) m_bgItem->update();
   update();
 }
 
@@ -187,19 +215,62 @@ void LayoutScene::drawBackground(QPainter* painter, const QRectF& rect) {
   Q_UNUSED(rect);
 }
 
-void LayoutScene::clearLayout() {
-  QList<QGraphicsItem*> allItems = items();
-  for (auto item : allItems) {
-    if (item == m_bgItem)
-      continue;
-    if (SnappingUtils::isSnappableItem(item) || dynamic_cast<GuideLineItem*>(item)) {
-      removeItem(item);
-      delete item;
+void LayoutScene::drawForeground(QPainter* painter, const QRectF& rect) {
+  Q_UNUSED(rect);
+
+  if (m_snapGuides.isEmpty()) return;
+
+  painter->save();
+  QPen pen(Qt::magenta, 1, Qt::DashLine);
+  painter->setPen(pen);
+
+  for (const QLineF& line : m_snapGuides) {
+    QLineF drawnLine = line;
+    QRectF bounds = sceneRect();
+
+    if (line.dx() == 0) {
+      drawnLine.setP1(QPointF(line.x1(), bounds.top()));
+      drawnLine.setP2(QPointF(line.x1(), bounds.bottom()));
+    } else {
+      drawnLine.setP1(QPointF(bounds.left(), line.y1()));
+      drawnLine.setP2(QPointF(bounds.right(), line.y1()));
     }
+
+    painter->drawLine(drawnLine);
   }
+
+  painter->restore();
 }
 
-ResizableAppItem* LayoutScene::addAppItem(const QString& name, const QRectF& rect) {
+// FIX: Prevent Segfault by only deleting top-level items
+void LayoutScene::clearLayout() {
+  QList<QGraphicsItem*> itemsToDelete;
+
+  // First pass: collect only top-level items to avoid double-deletion
+  for (auto item : items()) {
+    if (item == m_bgItem) continue;
+
+    // Only delete root items.
+    // If an AppItem is inside a Group, deleting the Group deletes the App.
+    // If we delete the Group and then try to access the App pointer later in
+    // this loop, we crash.
+    if (item->parentItem() == nullptr) {
+      // Check if it is one of our managed types
+      if (SnappingUtils::isSnappableItem(item) ||
+          dynamic_cast<GuideLineItem*>(item)) {
+        itemsToDelete.append(item);
+      }
+    }
+  }
+
+  // Safely delete collected roots
+  qDeleteAll(itemsToDelete);
+
+  clearSnapGuides();
+}
+
+ResizableAppItem* LayoutScene::addAppItem(const QString& name,
+                                          const QRectF& rect) {
   ResizableAppItem* item = new ResizableAppItem(name, rect);
   qreal scale = sceneRect().height() / 1080.0;
   item->setFontScale(scale);
@@ -209,11 +280,11 @@ ResizableAppItem* LayoutScene::addAppItem(const QString& name, const QRectF& rec
 
 void LayoutScene::alignSelectionLeft() {
   auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty())
-    return;
+  if (validItems.isEmpty()) return;
   if (validItems.size() == 1) {
     QRectF safe = getWorkingArea();
-    validItems.first()->moveBy(safe.left() - validItems.first()->sceneBoundingRect().left(), 0);
+    validItems.first()->moveBy(
+        safe.left() - validItems.first()->sceneBoundingRect().left(), 0);
     return;
   }
   qreal minX = std::numeric_limits<qreal>::max();
@@ -225,11 +296,11 @@ void LayoutScene::alignSelectionLeft() {
 
 void LayoutScene::alignSelectionRight() {
   auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty())
-    return;
+  if (validItems.isEmpty()) return;
   if (validItems.size() == 1) {
     QRectF safe = getWorkingArea();
-    validItems.first()->moveBy(safe.right() - validItems.first()->sceneBoundingRect().right(), 0);
+    validItems.first()->moveBy(
+        safe.right() - validItems.first()->sceneBoundingRect().right(), 0);
     return;
   }
   qreal targetX = -std::numeric_limits<qreal>::max();
@@ -243,11 +314,11 @@ void LayoutScene::alignSelectionRight() {
 
 void LayoutScene::alignSelectionTop() {
   auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty())
-    return;
+  if (validItems.isEmpty()) return;
   if (validItems.size() == 1) {
     QRectF safe = getWorkingArea();
-    validItems.first()->moveBy(0, safe.top() - validItems.first()->sceneBoundingRect().top());
+    validItems.first()->moveBy(
+        0, safe.top() - validItems.first()->sceneBoundingRect().top());
     return;
   }
   qreal minY = std::numeric_limits<qreal>::max();
@@ -261,11 +332,11 @@ void LayoutScene::alignSelectionTop() {
 
 void LayoutScene::alignSelectionBottom() {
   auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty())
-    return;
+  if (validItems.isEmpty()) return;
   if (validItems.size() == 1) {
     QRectF safe = getWorkingArea();
-    validItems.first()->moveBy(0, safe.bottom() - validItems.first()->sceneBoundingRect().bottom());
+    validItems.first()->moveBy(
+        0, safe.bottom() - validItems.first()->sceneBoundingRect().bottom());
     return;
   }
   qreal targetY = -std::numeric_limits<qreal>::max();
@@ -279,8 +350,7 @@ void LayoutScene::alignSelectionBottom() {
 
 void LayoutScene::alignSelectionCenterH() {
   auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty())
-    return;
+  if (validItems.isEmpty()) return;
   if (validItems.size() == 1) {
     QRectF safe = getWorkingArea();
     qreal targetCenter = safe.center().x();
@@ -306,8 +376,7 @@ void LayoutScene::alignSelectionCenterH() {
 
 void LayoutScene::alignSelectionCenterV() {
   auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty())
-    return;
+  if (validItems.isEmpty()) return;
   if (validItems.size() == 1) {
     QRectF safe = getWorkingArea();
     qreal targetCenter = safe.center().y();
@@ -333,14 +402,14 @@ void LayoutScene::alignSelectionCenterV() {
 
 void LayoutScene::distributeSelectionH() {
   auto sel = getAlignableItems(selectedItems());
-  if (sel.size() < 3)
-    return;
-  std::sort(sel.begin(), sel.end(), [](QGraphicsItem* a, QGraphicsItem* b) { return a->sceneBoundingRect().x() < b->sceneBoundingRect().x(); });
+  if (sel.size() < 3) return;
+  std::sort(sel.begin(), sel.end(), [](QGraphicsItem* a, QGraphicsItem* b) {
+    return a->sceneBoundingRect().x() < b->sceneBoundingRect().x();
+  });
   QGraphicsItem* first = sel.first();
   QGraphicsItem* last = sel.last();
   qreal totalItemWidth = 0;
-  for (auto item : sel)
-    totalItemWidth += item->sceneBoundingRect().width();
+  for (auto item : sel) totalItemWidth += item->sceneBoundingRect().width();
   qreal startX = first->sceneBoundingRect().left();
   qreal endX = last->sceneBoundingRect().right();
   qreal totalSpan = endX - startX;
@@ -356,14 +425,14 @@ void LayoutScene::distributeSelectionH() {
 
 void LayoutScene::distributeSelectionV() {
   auto sel = getAlignableItems(selectedItems());
-  if (sel.size() < 3)
-    return;
-  std::sort(sel.begin(), sel.end(), [](QGraphicsItem* a, QGraphicsItem* b) { return a->sceneBoundingRect().y() < b->sceneBoundingRect().y(); });
+  if (sel.size() < 3) return;
+  std::sort(sel.begin(), sel.end(), [](QGraphicsItem* a, QGraphicsItem* b) {
+    return a->sceneBoundingRect().y() < b->sceneBoundingRect().y();
+  });
   QGraphicsItem* first = sel.first();
   QGraphicsItem* last = sel.last();
   qreal totalItemHeight = 0;
-  for (auto item : sel)
-    totalItemHeight += item->sceneBoundingRect().height();
+  for (auto item : sel) totalItemHeight += item->sceneBoundingRect().height();
   qreal startY = first->sceneBoundingRect().top();
   qreal endY = last->sceneBoundingRect().bottom();
   qreal totalSpan = endY - startY;
