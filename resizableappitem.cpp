@@ -1,4 +1,5 @@
 #include "resizableappitem.h"
+
 #include <QAction>
 #include <QBrush>
 #include <QCursor>
@@ -9,7 +10,9 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPen>
+
 #include <cmath>
+
 #include "constants.h"
 #include "layoutscene.h"
 #include "settingsdialog.h"
@@ -317,20 +320,40 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     double newW = proposedRight - currentX;
     double newH = proposedBottom - currentY;
 
-    if (currentX + newW > validArea.right()) {
-      newW = validArea.right() - currentX;
+    if (m_aspectRatioEnabled && m_targetAspectRatio > 0) {
+      if (m_resizeHandle == Right || m_resizeHandle == (Right | Bottom)) {
+        newH = newW / m_targetAspectRatio;
+      } else if (m_resizeHandle == Bottom) {
+        newW = newH * m_targetAspectRatio;
+      }
+      if (newW < 50 || newH < 50) {
+        if (m_targetAspectRatio >= 1.0) {
+          newH = 50;
+          newW = 50 * m_targetAspectRatio;
+        } else {
+          newW = 50;
+          newH = 50 / m_targetAspectRatio;
+        }
+      }
+      if (currentX + newW > validArea.right()) {
+        newW = validArea.right() - currentX;
+        newH = newW / m_targetAspectRatio;
+      }
+      if (currentY + newH > validArea.bottom()) {
+        newH = validArea.bottom() - currentY;
+        newW = newH * m_targetAspectRatio;
+      }
+    } else {
+      // Standard unconstrained logic
+      if (currentX + newW > validArea.right())
+        newW = validArea.right() - currentX;
+      if (currentY + newH > validArea.bottom())
+        newH = validArea.bottom() - currentY;
+      if (newW < 50)
+        newW = 50;
+      if (newH < 50)
+        newH = 50;
     }
-    if (currentY + newH > validArea.bottom()) {
-      newH = validArea.bottom() - currentY;
-    }
-
-    if (newW < 50) {
-      newW = 50;
-    }
-    if (newH < 50) {
-      newH = 50;
-    }
-
     setRect(0, 0, newW, newH);
     updateStatusText();
 
@@ -350,4 +373,29 @@ int ResizableAppItem::getHandleAt(const QPointF& pt) {
     handle |= Bottom;
   }
   return handle;
+}
+
+void ResizableAppItem::initActions() {
+  QAction* propAction = new QAction("Properties", this);
+  QAction* removeAction = new QAction("Remove", this);
+
+  connect(propAction, &QAction::triggered, this, [this]() {
+    setSelected(true);
+    emit propertiesRequested(this);  // Signal based!
+  });
+
+  connect(removeAction, &QAction::triggered, this, [this]() {
+    if (scene())
+      scene()->removeItem(this);
+    this->deleteLater();  // Safe Deletion
+  });
+
+  m_contextActions.append(propAction);
+  m_contextActions.append(removeAction);
+
+  QAction* sep = new QAction(this);
+  sep->setSeparator(true);
+  m_contextActions.append(sep);
+
+  setupCustomActions();  // Let derived classes inject actions
 }

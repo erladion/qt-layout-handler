@@ -29,7 +29,8 @@ enum Types {
   ZoneItem = QGraphicsItem::UserType + 2,
   GroupItem = QGraphicsItem::UserType + 3,
   GuideItem = QGraphicsItem::UserType + 4,
-  Artboard = QGraphicsItem::UserType + 5
+  Artboard = QGraphicsItem::UserType + 5,
+  MirroredAppItem = QGraphicsItem::UserType + 6
 };
 }
 

@@ -1,4 +1,5 @@
 #include "propertiesdialog.h"
+
 #include <QFormLayout>
 #include <QGraphicsItem>
 #include <QLabel>
@@ -7,14 +8,17 @@
 #include <QSpinBox>
 #include <QStyleOption>
 #include <QVBoxLayout>
+
 #include "constants.h"
+
 #include "guidelineitem.h"
+#include "mirroredappitem.h"
 #include "resizableappitem.h"
 #include "snappingitemgroup.h"
 #include "zoneitem.h"
 
 PropertiesDialog::PropertiesDialog(QWidget* parent) : QWidget(parent), m_pCurrentItem(nullptr), m_blockSignals(false), m_isDragging(false) {
-  setFixedSize(Constants::PropertiesDialogWidth, Constants::PropertiesDialogHeight);
+  setFixedWidth(Constants::PropertiesDialogWidth);
 
   QPalette pal = palette();
 
@@ -72,13 +76,37 @@ PropertiesDialog::PropertiesDialog(QWidget* parent) : QWidget(parent), m_pCurren
   m_pHSpin->setKeyboardTracking(false);
   form->addRow("Height:", m_pHSpin);
 
+  m_pCropContainer = new QWidget();
+  QFormLayout* cropForm = new QFormLayout(m_pCropContainer);
+  cropForm->setContentsMargins(0, 0, 0, 0);
+
+  m_pCropTopSpin = new QSpinBox();
+  m_pCropTopSpin->setRange(0, 5000);
+  cropForm->addRow("Crop Top:", m_pCropTopSpin);
+  m_pCropBotSpin = new QSpinBox();
+  m_pCropBotSpin->setRange(0, 5000);
+  cropForm->addRow("Crop Bottom:", m_pCropBotSpin);
+  m_pCropLeftSpin = new QSpinBox();
+  m_pCropLeftSpin->setRange(0, 5000);
+  cropForm->addRow("Crop Left:", m_pCropLeftSpin);
+  m_pCropRightSpin = new QSpinBox();
+  m_pCropRightSpin->setRange(0, 5000);
+  cropForm->addRow("Crop Right:", m_pCropRightSpin);
+  m_pCropContainer->hide();
+
   mainLayout->addLayout(form);
+  mainLayout->addWidget(m_pCropContainer);
   mainLayout->addStretch();
 
   connect(m_pXSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
   connect(m_pYSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
   connect(m_pWSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
   connect(m_pHSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+
+  connect(m_pCropTopSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(m_pCropBotSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(m_pCropLeftSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
+  connect(m_pCropRightSpin, qOverload<int>(&QSpinBox::valueChanged), this, &PropertiesDialog::onValueChanged);
 }
 
 void PropertiesDialog::setItem(QGraphicsItem* item) {
@@ -189,6 +217,18 @@ void PropertiesDialog::refreshValues() {
     updateField(m_pHSpin, true, r.height());
   }
 
+  if (m_pCurrentItem->type() == Constants::Item::MirroredAppItem) {
+    auto mirroredApp = static_cast<MirroredAppItem*>(m_pCurrentItem);
+    updateField(m_pCropTopSpin, true, mirroredApp->cropTop());
+    updateField(m_pCropBotSpin, true, mirroredApp->cropBottom());
+    updateField(m_pCropLeftSpin, true, mirroredApp->cropLeft());
+    updateField(m_pCropRightSpin, true, mirroredApp->cropRight());
+    m_pCropContainer->show();
+  } else {
+    m_pCropContainer->hide();
+  }
+  adjustSize();
+
   m_blockSignals = false;
 }
 
@@ -224,6 +264,11 @@ void PropertiesDialog::onValueChanged() {
     r.setWidth(m_pWSpin->value());
     r.setHeight(m_pHSpin->value());
     zone->setRect(r);
+  }
+
+  auto mirroredApp = dynamic_cast<MirroredAppItem*>(m_pCurrentItem);
+  if (mirroredApp) {
+    mirroredApp->updateCropValues(m_pCropTopSpin->value(), m_pCropBotSpin->value(), m_pCropLeftSpin->value(), m_pCropRightSpin->value());
   }
 
   m_pCurrentItem->update();

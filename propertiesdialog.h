@@ -40,6 +40,12 @@ private:
 
   bool m_isDragging;
   QPoint m_dragOffset;
+
+  QWidget* m_pCropContainer;
+  QSpinBox* m_pCropTopSpin;
+  QSpinBox* m_pCropBotSpin;
+  QSpinBox* m_pCropLeftSpin;
+  QSpinBox* m_pCropRightSpin;
 };
 
 #endif  // PROPERTIESDIALOG_H

@@ -2,12 +2,16 @@
 #define RESIZABLEAPPITEM_H
 
 #include <QGraphicsRectItem>
+#include <QObject>
 
 #include "constants.h"
 
 class QGraphicsTextItem;
 
-class ResizableAppItem : public QGraphicsRectItem {
+class QAction;
+
+class ResizableAppItem : public QObject, public QGraphicsRectItem {
+  Q_OBJECT
 public:
   enum ResizeHandle { None = 0, Left = 1, Top = 2, Right = 4, Bottom = 8 };
 
@@ -18,10 +22,17 @@ public:
   void setLocked(bool locked);
   bool isLocked() const;
 
-  void updateStatusText();
+  virtual void updateStatusText();
 
   void setFontScale(qreal scale);
   void setBaseFontSize(int size);
+
+  void initActions();  // NVI Setup
+  void setAspectRatioEnabled(bool enabled) { m_aspectRatioEnabled = enabled; }
+  void setTargetAspectRatio(double ratio) { m_targetAspectRatio = ratio; }
+
+signals:
+  void propertiesRequested(QGraphicsItem* item);
 
 protected:
   QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
@@ -33,6 +44,13 @@ protected:
 
   void contextMenuEvent(QGraphicsSceneContextMenuEvent* event) override;
 
+  virtual void setupCustomActions() {}  // NVI Hook
+
+  QList<QAction*> m_contextActions;
+  double m_targetAspectRatio = -1.0;
+  bool m_aspectRatioEnabled = false;
+  QGraphicsTextItem* m_pStatusText;
+
 private:
   int getHandleAt(const QPointF& pt);
 
@@ -40,7 +58,7 @@ private:
   QString m_name;
 
   QGraphicsTextItem* m_pTitleText;
-  QGraphicsTextItem* m_pStatusText;
+
   bool m_locked;
 
   int m_baseFontSize;

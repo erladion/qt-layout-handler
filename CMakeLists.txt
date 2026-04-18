@@ -12,6 +12,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Xml)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Xml)
 
+find_package(X11 REQUIRED)
+
+find_package(PkgConfig REQUIRED)
+
+pkg_check_modules(GST REQUIRED
+    gstreamer-1.0
+    gstreamer-video-1.0
+    gstreamer-app-1.0
+)
+
 set(PROJECT_SOURCES
         main.cpp
 )
@@ -42,6 +52,10 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         newlayoutdialog.h newlayoutdialog.cpp
         settingsdialog.h settingsdialog.cpp
         constants.h
+        laserpointeritem.h laserpointeritem.cpp
+        windowselector.h windowselector.cpp
+        projectorwindow.h projectorwindow.cpp
+        mirroredappitem.h mirroredappitem.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET layouteditor APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -63,7 +77,9 @@ endif()
 
 qt_add_resources(resources.qrc)
 
-target_link_libraries(layouteditor PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::OpenGLWidgets Qt${QT_VERSION_MAJOR}::Xml)
+target_include_directories(layouteditor PRIVATE ${GST_INCLUDE_DIRS})
+
+target_link_libraries(layouteditor PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::OpenGLWidgets Qt${QT_VERSION_MAJOR}::Xml ${GST_LIBRARIES} X11::X11)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an

@@ -3,16 +3,20 @@
 #include "guidelineitem.h"
 #include "layoutscene.h"
 #include "layoutserializer.h"
+#include "mirroredappitem.h"
 #include "newlayoutdialog.h"
 #include "officetoolbar.h"
+#include "projectorwindow.h"
 #include "propertiesdialog.h"
 #include "resizableappitem.h"
 #include "rulerbar.h"
 #include "settingsdialog.h"
 #include "snappingitemgroup.h"
+#include "windowselector.h"
 #include "zoneitem.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDomDocument>
@@ -29,6 +33,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QPushButton>
 #include <QRandomGenerator>
 #include <QSlider>
 #include <QSpinBox>
@@ -37,6 +42,7 @@
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
+
 #include <algorithm>
 #include <cmath>
 
@@ -89,6 +95,7 @@ MainWindow::MainWindow(QWidget* parent)
 
   createToolbar();
   createMenuBar();
+  createFloatingToolbar();
 
   updateInterfaceState();
   statusBar()->showMessage("No active layout. Create a New Layout (File -> New) to begin.", Constants::StatusMessageDuration);
@@ -99,6 +106,20 @@ MainWindow::MainWindow(QWidget* parent)
       m_pHRuler->update();
       m_pVRuler->update();
     }
+  });
+
+  m_selector = new WindowSelector(this);
+
+  connect(m_selector, &WindowSelector::windowSelectedForGStreamer, this, [=](QString captureSource) {
+    // Pass the OS-specific string into the item
+    MirroredAppItem* item = new MirroredAppItem(captureSource);
+
+    item->initActions();
+    connect(item, &ResizableAppItem::propertiesRequested, this, &MainWindow::showProperties);
+
+    m_pScene->addItem(item);
+    m_pScene->clearSelection();
+    item->setSelected(true);
   });
 }
 
@@ -183,6 +204,37 @@ void MainWindow::updateInterfaceState() {
   }
 }
 
+void MainWindow::showProperties(QGraphicsItem* item) {
+  if (!m_pProperties->isVisible())
+    m_pProperties->show();
+  m_pProperties->raise();
+  m_pProperties->activateWindow();
+  if (item)
+    m_pProperties->setItem(item);
+  else if (!m_pScene->selectedItems().isEmpty())
+    m_pProperties->setItem(m_pScene->selectedItems().first());
+}
+
+void MainWindow::toggleFullScreen() {
+  if (isFullScreen()) {
+    if (m_wasMaximized)
+      showMaximized();
+    else
+      showNormal();
+    m_pToolbar->setVisible(true);
+    menuBar()->setVisible(true);
+    statusBar()->setVisible(true);
+  } else {
+    m_wasMaximized = isMaximized();
+    m_pToolbar->setVisible(false);
+    menuBar()->setVisible(false);
+    statusBar()->setVisible(false);
+    m_pHRuler->setVisible(false);
+    m_pVRuler->setVisible(false);
+    showFullScreen();
+  }
+}
+
 void MainWindow::newLayout() {
   if (!maybeSave()) {
     return;
@@ -205,6 +257,8 @@ void MainWindow::newLayout() {
 
     connectSceneSignals();
 
+    addBaseSceneItems();
+
     m_pView->setScene(m_pScene);
     updateInterfaceState();
     setModified(false);
@@ -224,6 +278,54 @@ void MainWindow::newLayout() {
     m_pView->fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
     statusBar()->showMessage(QString("Created new layout: %1x%2").arg(w).arg(h), Constants::StatusMessageDuration);
   }
+}
+
+void MainWindow::addBaseSceneItems() {
+  if (m_pScene == nullptr) {
+    return;
+  }
+
+  m_laserDot = new LaserPointerItem();
+  m_laserDot->hide();
+  m_pScene->addItem(m_laserDot);
+
+  // 2. Setup the Drawing Layer
+  m_drawingLayer = new QGraphicsPathItem();
+  QPen drawPen(Qt::yellow);
+  drawPen.setWidth(4);
+  drawPen.setCapStyle(Qt::RoundCap);
+  drawPen.setJoinStyle(Qt::RoundJoin);
+  m_drawingLayer->setPen(drawPen);
+  m_drawingLayer->setZValue(9998);  // Just under the laser
+  m_pScene->addItem(m_drawingLayer);
+
+  // 3. Connect the buttons
+  connect(m_pBtnEdit, &QPushButton::clicked, this, [=]() {
+    m_currentMode = PresenterMode::EditLayout;
+    m_laserDot->hide();
+    m_pBtnDraw->setChecked(false);
+    m_pBtnLaser->setChecked(false);
+  });
+
+  connect(m_pBtnDraw, &QPushButton::clicked, this, [=]() {
+    m_currentMode = PresenterMode::Draw;
+    m_laserDot->hide();
+    m_pBtnEdit->setChecked(false);
+    m_pBtnLaser->setChecked(false);
+  });
+
+  connect(m_pBtnLaser, &QPushButton::clicked, this, [=]() {
+    m_currentMode = PresenterMode::Laser;
+    m_laserDot->show();  // Turn the laser on!
+    m_pBtnEdit->setChecked(false);
+    m_pBtnDraw->setChecked(false);
+  });
+
+  connect(m_pBtnClear, &QPushButton::clicked, this, [=]() {
+    // Instantly wipe the drawings from the projector
+    m_currentPath = QPainterPath();
+    m_drawingLayer->setPath(m_currentPath);
+  });
 }
 
 void MainWindow::closeLayout() {
@@ -282,13 +384,53 @@ void MainWindow::openSettings() {
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+  if (m_isSelectingWindow && event->type() == QEvent::MouseButtonPress) {
+    if (static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+      m_pView->viewport()->releaseMouse();
+      m_isSelectingWindow = false;
+      m_selector->captureWindowUnderCursor();
+      return true;
+    }
+  }
+
+  if (watched == m_floatingToolbar) {
+    if (event->type() == QEvent::MouseButtonPress && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+      m_isDraggingToolbar = true;
+      m_dragOffset = static_cast<QMouseEvent*>(event)->pos();
+      return true;
+    } else if (event->type() == QEvent::MouseMove && m_isDraggingToolbar) {
+      m_floatingToolbar->move(m_floatingToolbar->pos() + static_cast<QMouseEvent*>(event)->pos() - m_dragOffset);
+      return true;
+    } else if (event->type() == QEvent::MouseButtonRelease && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+      m_isDraggingToolbar = false;
+      return true;
+    }
+  }
+
   if (event->type() == QEvent::MouseMove) {
-    QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
-    QPoint globalPos = mouseEvent->globalPosition().toPoint();
-    QPoint viewPos = m_pView->viewport()->mapFromGlobal(globalPos);
+    QPoint viewPos = m_pView->viewport()->mapFromGlobal(static_cast<QMouseEvent*>(event)->globalPosition().toPoint());
     m_pHRuler->updateCursorPos(viewPos);
     m_pVRuler->updateCursorPos(viewPos);
   }
+
+  if (watched == m_pView->viewport()) {
+    if (m_currentMode == PresenterMode::Laser && event->type() == QEvent::MouseMove) {
+      m_laserDot->updatePosition(m_pView->mapToScene(static_cast<QMouseEvent*>(event)->pos()));
+      return true;
+    }
+    if (m_currentMode == PresenterMode::Draw) {
+      QPointF scenePos = m_pView->mapToScene(static_cast<QMouseEvent*>(event)->pos());
+      if (event->type() == QEvent::MouseButtonPress && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+        m_currentPath.moveTo(scenePos);
+        return true;
+      } else if (event->type() == QEvent::MouseMove && (static_cast<QMouseEvent*>(event)->buttons() & Qt::LeftButton)) {
+        m_currentPath.lineTo(scenePos);
+        m_drawingLayer->setPath(m_currentPath);
+        return true;
+      }
+    }
+  }
+
   return QMainWindow::eventFilter(watched, event);
 }
 
@@ -716,6 +858,41 @@ void MainWindow::createMenuBar() {
   connect(settAct, &QAction::triggered, this, &MainWindow::openSettings);
 }
 
+void MainWindow::createFloatingToolbar() {
+  m_floatingToolbar = new QWidget(m_pView);  // Make the View its parent so it floats inside it!
+  m_floatingToolbar->setObjectName("FloatingToolbar");
+  m_floatingToolbar->setStyleSheet(
+      "#FloatingToolbar { background-color: rgba(30, 30, 30, 200); border-radius: 10px; }"
+      "QPushButton { color: white; background: transparent; border: 1px solid #555; border-radius: 5px; padding: 5px 10px; }"
+      "QPushButton:checked { background: #E53935; border: 1px solid #ff5252; }");
+
+  QHBoxLayout* toolLayout = new QHBoxLayout(m_floatingToolbar);
+  toolLayout->setContentsMargins(10, 5, 10, 5);
+
+  m_pBtnEdit = new QPushButton("Move/Crop");
+  m_pBtnDraw = new QPushButton("Draw");
+  m_pBtnLaser = new QPushButton("Laser");
+  m_pBtnClear = new QPushButton("Clear");
+
+  // Make them act like radio buttons
+  m_pBtnEdit->setCheckable(true);
+  m_pBtnDraw->setCheckable(true);
+  m_pBtnLaser->setCheckable(true);
+  m_pBtnEdit->setChecked(true);  // Default state
+
+  toolLayout->addWidget(m_pBtnEdit);
+  toolLayout->addWidget(m_pBtnDraw);
+  toolLayout->addWidget(m_pBtnLaser);
+  toolLayout->addWidget(m_pBtnClear);
+
+  // Position it at the top center of the view
+  m_floatingToolbar->setGeometry(m_pView->width() / 2 - 150, 20, 300, 40);
+  m_floatingToolbar->raise();
+  m_floatingToolbar->show();
+
+  m_floatingToolbar->installEventFilter(this);
+}
+
 void MainWindow::createToolbar() {
   if (m_pToolbar) {
     removeToolBar(m_pToolbar);
@@ -780,9 +957,53 @@ void MainWindow::createToolbar() {
   connect(rmAct, &QAction::triggered, this, &MainWindow::removeWindow);
   m_pSectionInsert->addLargeButton(new RibbonButton(rmAct, RibbonButton::Large));
 
+  // ==========================================
+  // 1. MAIN RIBBON: MIRROR STREAM BUTTON
+  // ==========================================
+  QAction* mirrorAct = new QAction(QIcon(":/icons/mirror.svg"), "Mirror Stream", this);
+  connect(mirrorAct, &QAction::triggered, this, [this]() {
+    if (!m_pScene)
+      return;
+
+    // Hijack the mouse globally and change to a crosshair.
+    // The unified eventFilter will catch the very next click and route it
+    // to m_selector->captureWindowUnderCursor();
+    m_pView->viewport()->grabMouse(Qt::CrossCursor);
+    m_isSelectingWindow = true;
+  });
+  // Add to your specific Ribbon section
+  m_pSectionInsert->addLargeButton(new RibbonButton(mirrorAct, RibbonButton::Large));
+
+  // ==========================================
+  // 2. MAIN RIBBON: PROJECTOR/OUTPUT BUTTON
+  // ==========================================
+  QAction* projAct = new QAction(QIcon(":/icons/output.svg"), "Send to Output", this);
+  connect(projAct, &QAction::triggered, this, [this]() {
+    if (!m_pScene)
+      return;
+
+    if (!m_pProjector) {
+      m_pProjector = new ProjectorWindow(m_pScene);
+    }
+
+    QList<QScreen*> screens = QApplication::screens();
+    if (screens.size() > 1) {
+      // Move to the second monitor and fullscreen
+      QRect screenGeo = screens[1]->geometry();
+      m_pProjector->move(screenGeo.topLeft());
+      m_pProjector->resize(screenGeo.size());
+      m_pProjector->showFullScreen();
+    } else {
+      // Fallback for single-monitor testing
+      m_pProjector->resize(1280, 720);
+      m_pProjector->show();
+    }
+  });
+  m_pSectionInsert->addLargeButton(new RibbonButton(projAct, RibbonButton::Large));
+
   QAction* wallAct = new QAction(QIcon(":/icons/image.svg"), "Wallpaper", this);
   connect(wallAct, &QAction::triggered, this, &MainWindow::setWallpaper);
-  m_pSectionInsert->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 3);
+  m_pSectionInsert->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 5);
 
   QToolButton* tempBtn = new RibbonButton(new QAction(QIcon(":/icons/template.svg"), "Templates", this), RibbonButton::Small);
   tempBtn->setPopupMode(QToolButton::InstantPopup);
@@ -792,7 +1013,7 @@ void MainWindow::createToolbar() {
   tempMenu->setStyleSheet(controlStyle);
   tempBtn->setMenu(tempMenu);
   connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
-  m_pSectionInsert->addWidget(tempBtn, 1, 3);
+  m_pSectionInsert->addWidget(tempBtn, 1, 5);
 
   // --- SECTION: ARRANGE ---
   m_pSectionArrange = ribbon->addSection("Arrange", QIcon(":/icons/section-arrange.svg"));

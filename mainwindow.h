@@ -10,11 +10,17 @@
 #include <QSlider>
 #include "snappingitemgroup.h"
 
+#include "laserpointeritem.h"
+
 class LayoutScene;
 class RulerBar;
 class PropertiesDialog;
 class RibbonSection;
 class QSpinBox;
+class QPushButton;
+
+class ProjectorWindow;
+class WindowSelector;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -22,6 +28,9 @@ class MainWindow : public QMainWindow {
 public:
   explicit MainWindow(QWidget* parent = nullptr);
   ~MainWindow();
+
+  void showProperties(QGraphicsItem* item = nullptr);
+  void toggleFullScreen();
 
 protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
@@ -70,14 +79,20 @@ private slots:
 private:
   void createToolbar();
   void createMenuBar();
+  void createFloatingToolbar();
   void updateRulers();
   void updateInterfaceState();
   bool maybeSave();
   void setModified(bool modified);
 
+  void addBaseSceneItems();
+
   void connectSceneSignals();
 
   QString getTemplateXml(const QString& name);
+
+  // Define our three operating modes
+  enum class PresenterMode { EditLayout, Draw, Laser };
 
   LayoutScene* m_pScene;
   QGraphicsView* m_pView;
@@ -107,6 +122,32 @@ private:
   RibbonSection* m_pSectionView;
 
   bool m_isModified;
+
+  QPushButton* m_pBtnEdit;
+  QPushButton* m_pBtnDraw;
+  QPushButton* m_pBtnLaser;
+  QPushButton* m_pBtnClear;
+
+  PresenterMode m_currentMode = PresenterMode::EditLayout;
+
+  // Drawing variables
+  QGraphicsPathItem* m_drawingLayer = nullptr;
+  QPainterPath m_currentPath;
+
+  // Laser variables
+  LaserPointerItem* m_laserDot = nullptr;
+
+  // The floating UI
+  QWidget* m_floatingToolbar = nullptr;
+
+  bool m_isDraggingToolbar = false;
+  QPoint m_dragOffset;
+
+  bool m_wasMaximized = false;
+  WindowSelector* m_selector = nullptr;
+  ProjectorWindow* m_pProjector = nullptr;
+
+  bool m_isSelectingWindow = false;
 };
 
 #endif  // MAINWINDOW_H
