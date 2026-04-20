@@ -11,7 +11,8 @@
 #include "zoneitem.h"
 
 bool SnappingUtils::isSnappableItem(QGraphicsItem* item) {
-  return (item->type() == Constants::Item::AppItem || item->type() == Constants::Item::ZoneItem || item->type() == Constants::Item::GroupItem);
+  return (item->type() == Constants::Item::AppItem || item->type() == Constants::Item::ZoneItem || item->type() == Constants::Item::GroupItem ||
+          item->type() == Constants::Item::MirroredAppItem);
 }
 
 bool SnappingUtils::isClose(double value, double target) {
@@ -35,7 +36,7 @@ QList<QGraphicsItem*> SnappingUtils::getSnappingCandidates(LayoutScene* scene, c
   QList<QGraphicsItem*> valid;
   valid.reserve(candidates.size());
 
-  for (QGraphicsItem* item : candidates) {
+  for (QGraphicsItem* item : std::as_const(candidates)) {
     if (item == ignoreItem) {
       continue;
     }
@@ -141,30 +142,32 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene,
 
   // 1. Guide Lines
   for (QGraphicsItem* item : scene->items()) {
-    if (item->type() == Constants::Item::GuideItem) {
-      GuideLineItem* guide = static_cast<GuideLineItem*>(item);
-      if (guide->orientation() == GuideLineItem::Vertical) {
-        double guideX = guide->pos().x();
-        if (isClose(visualLeft, guideX)) {
-          visualLeft = guideX;
-          snappedX = true;
-          addVGuide(guideX);
-        } else if (isClose(visualRight, guideX)) {
-          visualLeft = guideX - width;
-          snappedX = true;
-          addVGuide(guideX);
-        }
-      } else {
-        double guideY = guide->pos().y();
-        if (isClose(visualTop, guideY)) {
-          visualTop = guideY;
-          snappedY = true;
-          addHGuide(guideY);
-        } else if (isClose(visualBottom, guideY)) {
-          visualTop = guideY - height;
-          snappedY = true;
-          addHGuide(guideY);
-        }
+    if (item->type() != Constants::Item::GuideItem) {
+      continue;
+    }
+
+    GuideLineItem* guide = static_cast<GuideLineItem*>(item);
+    if (guide->orientation() == GuideLineItem::Vertical) {
+      const double guideX = guide->pos().x();
+      if (isClose(visualLeft, guideX)) {
+        visualLeft = guideX;
+        snappedX = true;
+        addVGuide(guideX);
+      } else if (isClose(visualRight, guideX)) {
+        visualLeft = guideX - width;
+        snappedX = true;
+        addVGuide(guideX);
+      }
+    } else {
+      const double guideY = guide->pos().y();
+      if (isClose(visualTop, guideY)) {
+        visualTop = guideY;
+        snappedY = true;
+        addHGuide(guideY);
+      } else if (isClose(visualBottom, guideY)) {
+        visualTop = guideY - height;
+        snappedY = true;
+        addHGuide(guideY);
       }
     }
   }
@@ -197,7 +200,7 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene,
   if (!snappedX || !snappedY) {
     QList<QGraphicsItem*> nearbyItems = getSnappingCandidates(scene, visualRect, selfItem);
 
-    for (QGraphicsItem* item : nearbyItems) {
+    for (QGraphicsItem* item : std::as_const(nearbyItems)) {
       QRectF otherRect = item->sceneBoundingRect();
 
       // Snap X
@@ -246,7 +249,7 @@ QPointF SnappingUtils::snapPosition(LayoutScene* scene,
 
   // 4. Grid
   if (scene->isGridEnabled()) {
-    int gs = scene->gridSize();
+    const int gs = scene->gridSize();
     if (!snappedX) {
       visualLeft = snapToGridVal(visualLeft, gs);
     }

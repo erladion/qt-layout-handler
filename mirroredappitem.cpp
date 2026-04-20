@@ -10,9 +10,10 @@
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
 
-MirroredAppItem::MirroredAppItem(const QString& captureSource)
-    : ResizableAppItem("Live Stream", QRectF(0, 0, 800, 600)), m_captureSource(captureSource) {
-  setCacheMode(QGraphicsItem::NoCache);  // CRITICAL for video performance
+#include "crophandleitem.h"
+
+MirroredAppItem::MirroredAppItem(const QString& captureSource) : ResizableAppItem("", QRectF(0, 0, 800, 600)), m_captureSource(captureSource) {
+  setCacheMode(QGraphicsItem::NoCache);
 
   m_cropThrottleTimer = new QTimer(this);
   m_cropThrottleTimer->setSingleShot(true);
@@ -29,15 +30,14 @@ MirroredAppItem::MirroredAppItem(const QString& captureSource)
     m_cropPending = false;
   });
 
-  m_pRenderTimer = new QTimer(this);
-  connect(m_pRenderTimer, &QTimer::timeout, this, [this]() {
-    if (m_frameReady) {
-      if (scene())
-        scene()->invalidate(sceneBoundingRect(), QGraphicsScene::ItemLayer);
-      m_frameReady = false;
-    }
-  });
-  m_pRenderTimer->start(16);  // 60 FPS UI polling
+  connect(
+      this, &MirroredAppItem::newFrameReceived, this,
+      [this]() {
+        if (scene()) {
+          scene()->invalidate(sceneBoundingRect(), QGraphicsScene::ItemLayer);
+        }
+      },
+      Qt::QueuedConnection);
 
   rebuildPipeline();
 
@@ -45,10 +45,6 @@ MirroredAppItem::MirroredAppItem(const QString& captureSource)
 }
 
 MirroredAppItem::~MirroredAppItem() {
-  if (m_pRenderTimer) {
-    m_pRenderTimer->stop();
-  }
-
   if (m_pipeline) {
     // 1. Send the EOS event to finalize the file properly
     gst_element_send_event(m_pipeline, gst_event_new_eos());
@@ -137,14 +133,15 @@ void MirroredAppItem::rebuildPipeline() {
 }
 
 void MirroredAppItem::setupCustomActions() {
-  QString actionText = m_isRecording ? "Stop Recording" : "Start Recording";
+  const QString actionText = m_isRecording ? "Stop Recording" : "Start Recording";
   QAction* recordAction = new QAction(actionText, this);
 
   connect(recordAction, &QAction::triggered, this, [this]() {
     if (!m_isRecording) {
       m_recordFilename = QFileDialog::getSaveFileName(nullptr, "Save Video", "", "Video (*.mkv)", nullptr, QFileDialog::DontUseNativeDialog);
-      if (m_recordFilename.isEmpty())
+      if (m_recordFilename.isEmpty()) {
         return;
+      }
       m_isRecording = true;
       rebuildPipeline();
     } else {
@@ -153,20 +150,96 @@ void MirroredAppItem::setupCustomActions() {
     }
   });
   m_pContextMenu.addAction(recordAction);
+
+  QAction* interactiveCropAction = new QAction("Interactive Crop", this);
+  connect(interactiveCropAction, &QAction::triggered, this, [this]() { enterCropMode(); });
+  m_pContextMenu.addAction(interactiveCropAction);
+}
+
+void MirroredAppItem::enterCropMode() {
+  if (m_isCropping) {
+    return;
+  }
+  m_isCropping = true;
+  m_tempCropRect = rect();  // Start with the full current size
+
+  // Create handles
+  m_topLeftHandle = new CropHandleItem(CropHandleItem::TopLeft, this);
+  m_topRightHandle = new CropHandleItem(CropHandleItem::TopRight, this);
+  m_bottomLeftHandle = new CropHandleItem(CropHandleItem::BottomLeft, this);
+  m_bottomRightHandle = new CropHandleItem(CropHandleItem::BottomRight, this);
+
+  m_applyButton = new CropHandleItem(CropHandleItem::ApplyButton, this);
+
+  // Position handles
+  m_topLeftHandle->setPos(m_tempCropRect.topLeft());
+  m_topRightHandle->setPos(m_tempCropRect.topRight());
+  m_bottomLeftHandle->setPos(m_tempCropRect.bottomLeft());
+  m_bottomRightHandle->setPos(m_tempCropRect.bottomRight());
+
+  // Position apply button below the bottom right
+  m_applyButton->setPos(m_tempCropRect.bottomRight() + QPointF(-30, 10));
+
+  update();  // Force repaint to show overlay
+}
+
+void MirroredAppItem::exitCropMode() {
+  m_isCropping = false;
+  delete m_topLeftHandle;
+  m_topLeftHandle = nullptr;
+  delete m_topRightHandle;
+  m_topRightHandle = nullptr;
+  delete m_bottomLeftHandle;
+  m_bottomLeftHandle = nullptr;
+  delete m_bottomRightHandle;
+  m_bottomRightHandle = nullptr;
+  delete m_applyButton;
+  m_applyButton = nullptr;
+  update();
+}
+
+void MirroredAppItem::updateCropHandles(CropHandleItem* movedHandle, int pos) {
+  QPointF p = movedHandle->pos();
+
+  // Clamp coordinates so handles can't cross each other
+  if (pos == CropHandleItem::TopLeft) {
+    m_tempCropRect.setTopLeft(p);
+    m_topRightHandle->setY(p.y());
+    m_bottomLeftHandle->setX(p.x());
+  } else if (pos == CropHandleItem::TopRight) {
+    m_tempCropRect.setTopRight(p);
+    m_topLeftHandle->setY(p.y());
+    m_bottomRightHandle->setX(p.x());
+  } else if (pos == CropHandleItem::BottomLeft) {
+    m_tempCropRect.setBottomLeft(p);
+    m_bottomRightHandle->setY(p.y());
+    m_topLeftHandle->setX(p.x());
+  } else if (pos == CropHandleItem::BottomRight) {
+    m_tempCropRect.setBottomRight(p);
+    m_bottomLeftHandle->setY(p.y());
+    m_topRightHandle->setX(p.x());
+  }
+
+  // Move the apply button to follow the crop box
+  m_applyButton->setPos(m_tempCropRect.bottomRight() + QPointF(-30, 10));
+
+  update();  // Request a redraw to update the dark overlay
 }
 
 void MirroredAppItem::updateCropValues(int top, int bottom, int left, int right) {
   if (m_sourceSize.isValid()) {
-    int maxWidth = m_sourceSize.width();
-    int maxHeight = m_sourceSize.height();
+    const int maxWidth = m_sourceSize.width();
+    const int maxHeight = m_sourceSize.height();
     left = std::max(0, left);
     right = std::max(0, right);
     top = std::max(0, top);
     bottom = std::max(0, bottom);
-    if (left + right >= maxWidth)
+    if (left + right >= maxWidth) {
       right = maxWidth - left - 1;
-    if (top + bottom >= maxHeight)
+    }
+    if (top + bottom >= maxHeight) {
       bottom = maxHeight - top - 1;
+    }
   }
   m_cropTop = top;
   m_cropBottom = bottom;
@@ -182,8 +255,9 @@ void MirroredAppItem::updateCropValues(int top, int bottom, int left, int right)
 GstFlowReturn MirroredAppItem::onNewSample(GstElement* sink, gpointer data) {
   MirroredAppItem* item = static_cast<MirroredAppItem*>(data);
   GstSample* sample = gst_app_sink_pull_sample(GST_APP_SINK(sink));
-  if (!sample)
+  if (!sample) {
     return GST_FLOW_ERROR;
+  }
 
   GstBuffer* buffer = gst_sample_get_buffer(sample);
   GstCaps* caps = gst_sample_get_caps(sample);
@@ -203,8 +277,9 @@ GstFlowReturn MirroredAppItem::onNewSample(GstElement* sink, gpointer data) {
 
   item->m_frameMutex.lock();
   item->m_currentFrame = copiedImg;
-  item->m_frameReady = true;
   item->m_frameMutex.unlock();
+
+  emit item->newFrameReceived();
 
   if (item->m_sourceSize != QSize(width, height)) {
     QTimer::singleShot(0, qApp, [item, width, height]() {
@@ -258,7 +333,7 @@ gboolean MirroredAppItem::busCall(GstBus* bus, GstMessage* msg, gpointer data) {
 
 void MirroredAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
   m_frameMutex.lock();
-  QImage frameToDraw = m_currentFrame;
+  const QImage frameToDraw = m_currentFrame;
   m_frameMutex.unlock();
 
   if (!frameToDraw.isNull()) {
@@ -276,6 +351,52 @@ void MirroredAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* o
   setBrush(Qt::NoBrush);
   ResizableAppItem::paint(painter, option, widget);
   setBrush(originalBrush);
+
+  if (m_isCropping) {
+    painter->save();
+    // Draw dark overlay over the excluded areas
+    QPainterPath fullPath;
+    fullPath.addRect(rect());
+
+    QPainterPath cropPath;
+    cropPath.addRect(m_tempCropRect);
+
+    QPainterPath maskPath = fullPath.subtracted(cropPath);
+
+    painter->setBrush(QColor(0, 0, 0, 150));  // Semi-transparent black
+    painter->setPen(Qt::NoPen);
+    painter->drawPath(maskPath);
+
+    // Draw dashed outline around the selected crop area
+    QPen dashedPen(Qt::white, 2, Qt::DashLine);
+    painter->setPen(dashedPen);
+    painter->setBrush(Qt::NoBrush);
+    painter->drawRect(m_tempCropRect);
+    painter->restore();
+  }
+}
+
+void MirroredAppItem::applyInteractiveCrop() {
+  if (!m_currentFrame.isNull()) {  // Ensure we know the original video size
+    // Calculate percentages of the crop based on the UI rect
+    const double leftPercent = m_tempCropRect.left() / rect().width();
+    const double rightPercent = (rect().width() - m_tempCropRect.right()) / rect().width();
+    const double topPercent = m_tempCropRect.top() / rect().height();
+    const double bottomPercent = (rect().height() - m_tempCropRect.bottom()) / rect().height();
+
+    // Convert percentages to raw pixels from the original video feed
+    const int videoWidth = m_currentFrame.width();
+    const int videoHeight = m_currentFrame.height();
+
+    // Add to existing crop (since videocrop values are cumulative if we restart the pipeline)
+    m_cropLeft += static_cast<int>(leftPercent * videoWidth);
+    m_cropRight += static_cast<int>(rightPercent * videoWidth);
+    m_cropTop += static_cast<int>(topPercent * videoHeight);
+    m_cropBottom += static_cast<int>(bottomPercent * videoHeight);
+  }
+
+  exitCropMode();
+  rebuildPipeline();  // Restart GStreamer with the new m_crop values
 }
 
 void MirroredAppItem::updateStatusText() {
@@ -286,8 +407,9 @@ void MirroredAppItem::updateStatusText() {
     status +=
         QString(" (Src: %1x%2, Disp: %3x%4)").arg(m_sourceSize.width()).arg(m_sourceSize.height()).arg((int)rect().width()).arg((int)rect().height());
   }
-  if (isLocked())
+  if (isLocked()) {
     status += " [LOCKED]";
+  }
 
   m_pStatusText->setPlainText(status);
   m_pStatusText->setPos(5, rect().height() - m_pStatusText->boundingRect().height());

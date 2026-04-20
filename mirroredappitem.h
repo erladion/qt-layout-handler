@@ -10,6 +10,8 @@
 
 #include <gst/gst.h>
 
+class CropHandleItem;
+
 class MirroredAppItem : public ResizableAppItem {
   Q_OBJECT
 public:
@@ -28,6 +30,12 @@ public:
   int cropLeft() const { return m_cropLeft; }
   int cropRight() const { return m_cropRight; }
 
+  void updateCropHandles(CropHandleItem* movedHandle, int position);
+  void applyInteractiveCrop();
+
+signals:
+  void newFrameReceived();
+
 protected:
   void setupCustomActions();
   void updateStatusText() override;
@@ -39,6 +47,10 @@ private:
   static GstFlowReturn onNewSample(GstElement* sink, gpointer data);
   static gboolean busCall(GstBus* bus, GstMessage* message, gpointer data);
 
+  void enterCropMode();
+  void exitCropMode();
+
+private:
   long m_targetXid;
   QSize m_sourceSize;
 
@@ -59,9 +71,17 @@ private:
   QImage m_currentFrame;
   QMutex m_frameMutex;
   bool m_frameReady = false;
-  QTimer* m_pRenderTimer;
 
   QString m_captureSource;
+
+  bool m_isCropping = false;
+  QRectF m_tempCropRect;
+
+  CropHandleItem* m_topLeftHandle = nullptr;
+  CropHandleItem* m_topRightHandle = nullptr;
+  CropHandleItem* m_bottomLeftHandle = nullptr;
+  CropHandleItem* m_bottomRightHandle = nullptr;
+  CropHandleItem* m_applyButton = nullptr;
 };
 
 #endif  // MIRROREDAPPITEM_H

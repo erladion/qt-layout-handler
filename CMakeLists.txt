@@ -96,6 +96,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         projectorwindow.h projectorwindow.cpp
         mirroredappitem.h mirroredappitem.cpp
         drawingmanager.h drawingmanager.cpp
+        crophandleitem.h crophandleitem.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET layouteditor APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

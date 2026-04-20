@@ -42,6 +42,8 @@
 #include <QToolBar>
 #include <QToolButton>
 
+#include <QOpenGLWidget>
+
 #include <cmath>
 
 MainWindow::MainWindow(QWidget* parent)
@@ -50,16 +52,18 @@ MainWindow::MainWindow(QWidget* parent)
   setWindowTitle("Layout Editor");
 
   m_pView = new QGraphicsView(this);
+  m_pView->setViewport(new QOpenGLWidget(this));
   m_pView->setBackgroundBrush(QColor(Constants::Color::ViewBackgroundEmpty));
   m_pView->setRenderHint(QPainter::Antialiasing);
   m_pView->setFrameShape(QFrame::NoFrame);
-
   m_pView->setDragMode(QGraphicsView::RubberBandDrag);
   m_pView->setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
   m_pView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_pView->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_pView->setResizeAnchor(QGraphicsView::AnchorViewCenter);
   m_pView->setOptimizationFlags(QGraphicsView::DontSavePainterState | QGraphicsView::DontAdjustForAntialiasing);
+  m_pView->viewport()->setMouseTracking(true);
+  m_pView->viewport()->installEventFilter(this);
 
   m_pHRuler = new RulerBar(RulerBar::Horizontal, m_pView, this);
   m_pVRuler = new RulerBar(RulerBar::Vertical, m_pView, this);
@@ -72,18 +76,12 @@ MainWindow::MainWindow(QWidget* parent)
   QGridLayout* grid = new QGridLayout(central);
   grid->setSpacing(0);
   grid->setContentsMargins(0, 0, 0, 0);
-
   grid->addWidget(m_pCorner, 0, 0);
   grid->addWidget(m_pHRuler, 0, 1);
   grid->addWidget(m_pVRuler, 1, 0);
   grid->addWidget(m_pView, 1, 1);
-
   setCentralWidget(central);
 
-  m_pView->viewport()->setMouseTracking(true);
-
-  m_pView->viewport()->installEventFilter(this);
-  // FIX: Updated variable name to m_pHRuler
   m_pHRuler->installEventFilter(this);
   m_pVRuler->installEventFilter(this);
 
@@ -196,15 +194,17 @@ void MainWindow::updateInterfaceState() {
     m_pCorner->setVisible(hasScene);
 
   if (hasScene) {
-    m_pView->setBackgroundBrush(this->palette().window());
+    m_pView->setBackgroundBrush(palette().window());
   } else {
     m_pView->setBackgroundBrush(QColor(Constants::Color::ViewBackgroundEmpty));
   }
 }
 
 void MainWindow::showProperties(QGraphicsItem* item) {
-  if (!m_pProperties->isVisible())
+  if (!m_pProperties->isVisible()) {
     m_pProperties->show();
+  }
+
   m_pProperties->raise();
   m_pProperties->activateWindow();
   if (item) {
@@ -217,10 +217,11 @@ void MainWindow::showProperties(QGraphicsItem* item) {
 
 void MainWindow::toggleFullScreen() {
   if (isFullScreen()) {
-    if (m_wasMaximized)
+    if (m_wasMaximized) {
       showMaximized();
-    else
+    } else {
       showNormal();
+    }
     m_pToolbar->setVisible(true);
     menuBar()->setVisible(true);
     statusBar()->setVisible(true);
@@ -246,12 +247,11 @@ void MainWindow::newLayout() {
       m_pScene->deleteLater();
     }
 
-    int w = dlg.selectedWidth();
-    int h = dlg.selectedHeight();
+    const int w = dlg.selectedWidth();
+    const int h = dlg.selectedHeight();
 
     m_pScene = new LayoutScene(0, 0, w, h, this);
     m_pScene->setItemIndexMethod(QGraphicsScene::NoIndex);
-
     m_pScene->setTopBarHeight(SettingsDialog::getTopBarHeight());
     m_pScene->setBottomBarHeight(SettingsDialog::getBottomBarHeight());
 
@@ -265,8 +265,9 @@ void MainWindow::newLayout() {
 
     // Clean up laser setup inside connections
     connect(m_pBtnClear, &QPushButton::clicked, this, [this]() {
-      if (m_pDrawingManager)
+      if (m_pDrawingManager) {
         m_pDrawingManager->clearDrawings();
+      }
     });
 
     connectSceneSignals();
@@ -327,8 +328,8 @@ void MainWindow::openSettings() {
         }
       }
       // Also apply bar heights
-      int newTop = SettingsDialog::getTopBarHeight();
-      int newBot = SettingsDialog::getBottomBarHeight();
+      const int newTop = SettingsDialog::getTopBarHeight();
+      const int newBot = SettingsDialog::getBottomBarHeight();
       m_pScene->setTopBarHeight(newTop);
       m_pScene->setBottomBarHeight(newBot);
 
@@ -372,8 +373,8 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
 
       // --- VIEWPORT BOUNDING MATH ---
       // Calculate the maximum allowed X and Y coordinates
-      int maxX = m_pView->viewport()->width() - m_floatingToolbar->width();
-      int maxY = m_pView->viewport()->height() - m_floatingToolbar->height();
+      const int maxX = m_pView->viewport()->width() - m_floatingToolbar->width();
+      const int maxY = m_pView->viewport()->height() - m_floatingToolbar->height();
 
       // Clamp the position so it cannot go below 0 or above Max
       newPos.setX(qBound(0, newPos.x(), maxX));
@@ -653,8 +654,9 @@ void MainWindow::ungroupItems() {
     }
   }
 
-  if (any)
+  if (any) {
     statusBar()->showMessage("Ungrouped items.", Constants::StatusMessageDuration);
+  }
 }
 
 void MainWindow::align() {
@@ -713,8 +715,8 @@ void MainWindow::applyTemplate(QAction* action) {
     return;
   }
 
-  QString presetName = action->text();
-  QString xmlContent = getTemplateXml(presetName);
+  const QString presetName = action->text();
+  const QString xmlContent = getTemplateXml(presetName);
   if (!xmlContent.isEmpty() && LayoutSerializer::loadFromXml(m_pScene, xmlContent)) {
     setModified(false);
     statusBar()->showMessage("Applied template: " + presetName, Constants::StatusMessageDuration);
@@ -970,7 +972,7 @@ void MainWindow::createFloatingToolbar() {
   });
 
   connect(drawColorBtn, &QPushButton::clicked, this, [this, drawColorBtn]() {
-    QColor color = QColorDialog::getColor(m_drawColor, this, "Draw Color");
+    QColor color = QColorDialog::getColor(m_drawColor, this, "Draw Color", QColorDialog::DontUseNativeDialog);
     if (color.isValid()) {
       m_drawColor = color;
       drawColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(color.name()));
@@ -1020,8 +1022,9 @@ void MainWindow::createFloatingToolbar() {
 }
 
 void MainWindow::updatePopoutPositions() {
-  if (!m_floatingToolbar)
+  if (!m_floatingToolbar) {
     return;
+  }
 
   // Calculate position: right edge of main toolbar + 10px gap, aligned vertically
   QPoint targetPos = m_floatingToolbar->pos() + QPoint(m_floatingToolbar->width() + 10, 0);
