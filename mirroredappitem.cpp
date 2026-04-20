@@ -5,6 +5,8 @@
 #include <QGraphicsScene>
 #include <QPainter>
 
+#include <thread>
+
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
 
@@ -43,20 +45,39 @@ MirroredAppItem::MirroredAppItem(const QString& captureSource)
 }
 
 MirroredAppItem::~MirroredAppItem() {
-  if (m_pRenderTimer)
+  if (m_pRenderTimer) {
     m_pRenderTimer->stop();
+  }
+
   if (m_pipeline) {
-    if (m_isRecording) {
-      gst_element_send_event(m_pipeline, gst_event_new_eos());
-      GstBus* bus = gst_element_get_bus(m_pipeline);
+    // 1. Send the EOS event to finalize the file properly
+    gst_element_send_event(m_pipeline, gst_event_new_eos());
+
+    // 2. Transfer ownership of the pipeline pointer to a background thread
+    GstElement* pipelineToClean = m_pipeline;
+    m_pipeline = nullptr;  // Nullify so it isn't double-freed
+
+    // 3. Spin up a detached thread to wait for EOS and clean up
+    std::thread([pipelineToClean]() {
+      GstBus* bus = gst_element_get_bus(pipelineToClean);
+
+      // Wait up to 2 seconds for EOS to ensure the file writes correctly
       GstMessage* msg = gst_bus_timed_pop_filtered(bus, GST_SECOND * 2, (GstMessageType)(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
-      if (msg)
+
+      if (msg) {
         gst_message_unref(msg);
+      } else {
+        qWarning() << "Timeout waiting for EOS during teardown.";
+      }
+
       gst_object_unref(bus);
-    }
-    gst_element_set_state(m_pipeline, GST_STATE_NULL);
-    gst_object_unref(m_pipeline);
-    m_pipeline = nullptr;
+
+      // Cleanly shut down the pipeline
+      gst_element_set_state(pipelineToClean, GST_STATE_NULL);
+      gst_object_unref(pipelineToClean);
+
+      qDebug() << "Pipeline teardown complete in background.";
+    }).detach();
   }
 }
 
@@ -110,38 +131,9 @@ void MirroredAppItem::rebuildPipeline() {
   // 1. Start the pipeline
   gst_element_set_state(m_pipeline, GST_STATE_PLAYING);
 
-  // ==========================================
-  // 2. TEMPORARY DEBUG TRAP
-  // ==========================================
-  // Wait for up to 1 second to see if GStreamer immediately panics
   GstBus* bus = gst_element_get_bus(m_pipeline);
-  GstMessage* msg = gst_bus_timed_pop_filtered(bus, GST_SECOND * 1, (GstMessageType)(GST_MESSAGE_ERROR | GST_MESSAGE_EOS | GST_MESSAGE_WARNING));
-
-  if (msg != nullptr) {
-    if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR) {
-      GError* err;
-      gchar* debug_info;
-      gst_message_parse_error(msg, &err, &debug_info);
-      qDebug() << "GSTREAMER FATAL ERROR:" << err->message;
-      qDebug() << "Debug Info:" << (debug_info ? debug_info : "none");
-      g_error_free(err);
-      g_free(debug_info);
-    } else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_WARNING) {
-      GError* err;
-      gchar* debug_info;
-      gst_message_parse_warning(msg, &err, &debug_info);
-      qDebug() << "GSTREAMER WARNING:" << err->message;
-      g_error_free(err);
-      g_free(debug_info);
-    } else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_EOS) {
-      qDebug() << "GSTREAMER EOS: The stream ended immediately. gdiscreencapsrc could not bind to the window.";
-    }
-    gst_message_unref(msg);
-  } else {
-    qDebug() << "GStreamer started successfully. No immediate errors.";
-  }
+  gst_bus_add_watch(bus, busCall, this);
   gst_object_unref(bus);
-  // ==========================================
 }
 
 void MirroredAppItem::setupCustomActions() {
@@ -228,6 +220,40 @@ GstFlowReturn MirroredAppItem::onNewSample(GstElement* sink, gpointer data) {
 
   gst_sample_unref(sample);
   return GST_FLOW_OK;
+}
+
+gboolean MirroredAppItem::busCall(GstBus* bus, GstMessage* msg, gpointer data) {
+  MirroredAppItem* item = static_cast<MirroredAppItem*>(data);
+
+  switch (GST_MESSAGE_TYPE(msg)) {
+    case GST_MESSAGE_ERROR: {
+      GError* err = nullptr;
+      gchar* debug_info = nullptr;
+      gst_message_parse_error(msg, &err, &debug_info);
+      qWarning() << "GStreamer Error:" << err->message;
+      if (debug_info) {
+        qWarning() << "Debug info:" << debug_info;
+      }
+      g_clear_error(&err);
+      g_free(debug_info);
+      break;
+    }
+    case GST_MESSAGE_WARNING: {
+      GError* err = nullptr;
+      gchar* debug_info = nullptr;
+      gst_message_parse_warning(msg, &err, &debug_info);
+      qWarning() << "GStreamer Warning:" << err->message;
+      g_clear_error(&err);
+      g_free(debug_info);
+      break;
+    }
+    case GST_MESSAGE_EOS:
+      qDebug() << "GStreamer End-Of-Stream reached.";
+      break;
+    default:
+      break;
+  }
+  return TRUE;  // Return TRUE to keep the watch active
 }
 
 void MirroredAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {

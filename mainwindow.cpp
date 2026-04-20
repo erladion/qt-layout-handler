@@ -1287,7 +1287,7 @@ void MainWindow::createToolbar() {
   // ==========================================
   // 3. MAIN RIBBON: STOP OUTPUT BUTTON
   // ==========================================
-  QAction* stopProjAct = new QAction(QIcon(":/icons/close.svg"), "Stop Output", this);
+  QAction* stopProjAct = new QAction(QIcon(":/icons/stop_output"), "Stop Output", this);
   // Optional: Give it a shortcut so you can hit a key to instantly kill the output
   stopProjAct->setShortcut(QKeySequence(Qt::Key_Escape));
 
@@ -1305,7 +1305,7 @@ void MainWindow::createToolbar() {
 
   QAction* wallAct = new QAction(QIcon(":/icons/image.svg"), "Wallpaper", this);
   connect(wallAct, &QAction::triggered, this, &MainWindow::setWallpaper);
-  m_pSectionInsert->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 5);
+  m_pSectionInsert->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 6);
 
   QToolButton* tempBtn = new RibbonButton(new QAction(QIcon(":/icons/template.svg"), "Templates", this), RibbonButton::Small);
   tempBtn->setPopupMode(QToolButton::InstantPopup);
@@ -1315,7 +1315,7 @@ void MainWindow::createToolbar() {
   tempMenu->setStyleSheet(controlStyle);
   tempBtn->setMenu(tempMenu);
   connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
-  m_pSectionInsert->addWidget(tempBtn, 1, 5);
+  m_pSectionInsert->addWidget(tempBtn, 1, 6);
 
   // --- SECTION: ARRANGE ---
   m_pSectionArrange = ribbon->addSection("Arrange", QIcon(":/icons/section-arrange.svg"));

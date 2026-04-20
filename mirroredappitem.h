@@ -35,7 +35,9 @@ protected:
 private:
   void rebuildPipeline();
   QString generatePipelineString();
+
   static GstFlowReturn onNewSample(GstElement* sink, gpointer data);
+  static gboolean busCall(GstBus* bus, GstMessage* message, gpointer data);
 
   long m_targetXid;
   QSize m_sourceSize;

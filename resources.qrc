@@ -35,5 +35,6 @@
         <file>icons/mirror.svg</file>
         <file>icons/move.svg</file>
         <file>icons/output.svg</file>
+        <file>icons/stop_output.svg</file>
     </qresource>
 </RCC>
