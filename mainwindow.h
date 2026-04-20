@@ -8,9 +8,10 @@
 #include <QLabel>
 #include <QMainWindow>
 #include <QSlider>
+
 #include "snappingitemgroup.h"
 
-#include "laserpointeritem.h"
+#include "drawingmanager.h"
 
 class LayoutScene;
 class RulerBar;
@@ -61,12 +62,7 @@ private slots:
   void groupItems();
   void ungroupItems();
 
-  void alignLeft();
-  void alignRight();
-  void alignTop();
-  void alignBottom();
-  void alignCenterH();
-  void alignCenterV();
+  void align();
   void distributeH();
   void distributeV();
 
@@ -84,8 +80,6 @@ private:
   void updateInterfaceState();
   bool maybeSave();
   void setModified(bool modified);
-
-  void addBaseSceneItems();
 
   void connectSceneSignals();
 
@@ -131,13 +125,6 @@ private:
 
   PresenterMode m_currentMode = PresenterMode::EditLayout;
 
-  // Drawing variables
-  QGraphicsPathItem* m_drawingLayer = nullptr;
-  QPainterPath m_currentPath;
-
-  // Laser variables
-  LaserPointerItem* m_laserDot = nullptr;
-
   // The floating UI
   QWidget* m_floatingToolbar = nullptr;
 
@@ -150,21 +137,18 @@ private:
 
   bool m_isSelectingWindow = false;
 
-  DrawShape m_currentShape = DrawShape::Freehand;
-  QColor m_laserColor = Qt::red;
-  int m_laserSize = 15;
-
-  QColor m_drawColor = Qt::blue;
-  int m_drawSize = 4;
-
   QWidget* m_laserSettingsWidget = nullptr;
   QWidget* m_drawSettingsWidget = nullptr;
 
-  void updatePopoutPositions();
+  DrawShape m_currentShape = DrawShape::Freehand;
+  QColor m_laserColor = Qt::red;
+  int m_laserSize = 15;
+  QColor m_drawColor = Qt::blue;
+  int m_drawSize = 4;
 
-  QPointF m_drawStartPos;
-  QGraphicsItem* m_activeDrawItem = nullptr;
-  QList<QGraphicsItem*> m_drawnItems;
+  DrawingManager* m_pDrawingManager = nullptr;
+
+  void updatePopoutPositions();
 };
 
 #endif  // MAINWINDOW_H

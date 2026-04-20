@@ -8,13 +8,18 @@
 #include <QGraphicsScene>
 #include <QLineF>
 #include <QPixmap>
+#include <QTimer>
 #include <QVector>
+
+#include <functional>
 
 class ResizableAppItem;
 
 class LayoutScene : public QGraphicsScene {
   Q_OBJECT
 public:
+  enum Alignment { Left, Top, Right, Bottom, CenterH, CenterV };
+
   explicit LayoutScene(qreal x, qreal y, qreal w, qreal h, QObject* parent = nullptr);
 
   bool isGridEnabled() const;
@@ -41,14 +46,14 @@ public:
   void setSnapGuides(const QList<QLineF>& guides);
   void clearSnapGuides();
 
-public slots:
-  void alignSelectionLeft();
-  void alignSelectionRight();
-  void alignSelectionTop();
-  void alignSelectionBottom();
-  void alignSelectionCenterH();
-  void alignSelectionCenterV();
+  void setLaserActive(bool active);
+  void updateLaserPosition(const QPointF& pos);
+  void setLaserColor(const QColor& color);
+  void setLaserSize(int size);
 
+  void alignSelection(Alignment alignment);
+
+public slots:
   void distributeSelectionH();
   void distributeSelectionV();
 
@@ -58,8 +63,12 @@ protected:
 private slots:
   void onGridCalculationFinished();
 
+  void fadeLaserTrail();
+
 private:
   void triggerGridUpdate();
+
+  void applyAlignment(std::function<qreal(const QRectF&)> getEdge, bool isHorizontal);
 
   bool m_gridEnabled;
   int m_gridSize;
@@ -72,6 +81,17 @@ private:
   QVector<QLineF> m_cachedGridLines;
 
   QList<QLineF> m_snapGuides;
+
+  struct TrailPoint {
+    QPointF pos;
+    int age;
+  };
+  QList<TrailPoint> m_laserTrail;
+  QPointF m_laserPos;
+  QTimer m_laserTimer;
+  bool m_laserActive = false;
+  QColor m_laserColor = Qt::red;
+  int m_laserSize = 15;
 };
 
 #endif  // LAYOUTSCENE_H

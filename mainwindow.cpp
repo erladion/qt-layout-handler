@@ -255,9 +255,21 @@ void MainWindow::newLayout() {
     m_pScene->setTopBarHeight(SettingsDialog::getTopBarHeight());
     m_pScene->setBottomBarHeight(SettingsDialog::getBottomBarHeight());
 
-    connectSceneSignals();
+    if (m_pDrawingManager) {
+      delete m_pDrawingManager;
+    }
+    m_pDrawingManager = new DrawingManager(m_pScene, this);
+    m_pDrawingManager->setColor(m_drawColor);
+    m_pDrawingManager->setSize(m_drawSize);
+    m_pDrawingManager->setShape(static_cast<DrawingManager::Shape>(m_currentShape));
 
-    addBaseSceneItems();
+    // Clean up laser setup inside connections
+    connect(m_pBtnClear, &QPushButton::clicked, this, [this]() {
+      if (m_pDrawingManager)
+        m_pDrawingManager->clearDrawings();
+    });
+
+    connectSceneSignals();
 
     m_pView->setScene(m_pScene);
     updateInterfaceState();
@@ -278,46 +290,6 @@ void MainWindow::newLayout() {
     m_pView->fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
     statusBar()->showMessage(QString("Created new layout: %1x%2").arg(w).arg(h), Constants::StatusMessageDuration);
   }
-}
-
-void MainWindow::addBaseSceneItems() {
-  if (m_pScene == nullptr) {
-    return;
-  }
-
-  m_laserDot = new LaserPointerItem();
-  m_laserDot->hide();
-  m_pScene->addItem(m_laserDot);
-
-  // 2. Setup the Drawing Layer
-  m_drawingLayer = new QGraphicsPathItem();
-  QPen drawPen(Qt::yellow);
-  drawPen.setWidth(4);
-  drawPen.setCapStyle(Qt::RoundCap);
-  drawPen.setJoinStyle(Qt::RoundJoin);
-  m_drawingLayer->setPen(drawPen);
-  m_drawingLayer->setZValue(9998);  // Just under the laser
-  m_pScene->addItem(m_drawingLayer);
-
-  connect(m_pBtnClear, &QPushButton::clicked, this, [this]() {
-    // 1. Remove and delete all dynamically created shapes (Rectangles, Ellipses, Paths)
-    for (QGraphicsItem* item : std::as_const(m_drawnItems)) {
-      if (m_pScene && item->scene() == m_pScene) {
-        m_pScene->removeItem(item);
-      }
-      delete item;  // Free memory
-    }
-    m_drawnItems.clear();  // Empty the tracking list
-
-    // 2. Clear the original legacy continuous path layer
-    m_currentPath.clear();
-    if (m_drawingLayer) {
-      m_drawingLayer->setPath(m_currentPath);
-    }
-
-    // 3. Safety reset in case a drawing was active when clicked
-    m_activeDrawItem = nullptr;
-  });
 }
 
 void MainWindow::closeLayout() {
@@ -424,80 +396,12 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
 
   if (watched == m_pView->viewport() && m_pScene != nullptr) {
     if (m_currentMode == PresenterMode::Laser && event->type() == QEvent::MouseMove) {
-      m_laserDot->updatePosition(m_pView->mapToScene(static_cast<QMouseEvent*>(event)->pos()));
+      m_pScene->updateLaserPosition(m_pView->mapToScene(static_cast<QMouseEvent*>(event)->pos()));
       return true;
     }
 
-    if (m_currentMode == PresenterMode::Draw && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseMove)) {
-      QPointF scenePos = m_pView->mapToScene(static_cast<QMouseEvent*>(event)->pos());
-
-      // PRESS: Start a new shape
-      if (event->type() == QEvent::MouseButtonPress && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
-        m_drawStartPos = scenePos;
-        QPen drawPen(m_drawColor, m_drawSize, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-
-        if (m_currentShape == DrawShape::Freehand || m_currentShape == DrawShape::Marker) {
-          if (m_currentShape == DrawShape::Marker) {
-            // Create the highlighter effect!
-            QColor markerColor = m_drawColor;
-            markerColor.setAlpha(90);  // Semi-transparent (0-255 scale)
-            drawPen.setColor(markerColor);
-
-            // Optional: Give it a chisel-tip feel instead of a round pen
-            drawPen.setCapStyle(Qt::SquareCap);
-            drawPen.setJoinStyle(Qt::MiterJoin);
-          }
-
-          QGraphicsPathItem* pathItem = new QGraphicsPathItem();
-          pathItem->setPen(drawPen);
-          pathItem->setZValue(900);  // Below laser, above apps
-          m_currentPath.clear();
-          m_currentPath.moveTo(scenePos);
-          pathItem->setPath(m_currentPath);
-          m_pScene->addItem(pathItem);
-          m_activeDrawItem = pathItem;
-        } else if (m_currentShape == DrawShape::Rectangle) {
-          QGraphicsRectItem* rectItem = new QGraphicsRectItem();
-          rectItem->setPen(drawPen);
-          rectItem->setZValue(900);
-          rectItem->setRect(QRectF(scenePos, scenePos));  // 0x0 rect to start
-          m_pScene->addItem(rectItem);
-          m_activeDrawItem = rectItem;
-        } else if (m_currentShape == DrawShape::Ellipse) {
-          QGraphicsEllipseItem* ellipseItem = new QGraphicsEllipseItem();
-          ellipseItem->setPen(drawPen);
-          ellipseItem->setZValue(900);
-          ellipseItem->setRect(QRectF(scenePos, scenePos));
-          m_pScene->addItem(ellipseItem);
-          m_activeDrawItem = ellipseItem;
-        }
-
-        if (m_activeDrawItem)
-          m_drawnItems.append(m_activeDrawItem);
-        return true;
-      }
-
-      // DRAG: Update the current shape's geometry
-      else if (event->type() == QEvent::MouseMove && (static_cast<QMouseEvent*>(event)->buttons() & Qt::LeftButton)) {
-        if (m_activeDrawItem) {
-          if (m_currentShape == DrawShape::Freehand || m_currentShape == DrawShape::Marker) {
-            m_currentPath.lineTo(scenePos);
-            static_cast<QGraphicsPathItem*>(m_activeDrawItem)->setPath(m_currentPath);
-          } else if (m_currentShape == DrawShape::Rectangle) {
-            // .normalized() allows drawing up and to the left!
-            QRectF newRect = QRectF(m_drawStartPos, scenePos).normalized();
-            static_cast<QGraphicsRectItem*>(m_activeDrawItem)->setRect(newRect);
-          } else if (m_currentShape == DrawShape::Ellipse) {
-            QRectF newRect = QRectF(m_drawStartPos, scenePos).normalized();
-            static_cast<QGraphicsEllipseItem*>(m_activeDrawItem)->setRect(newRect);
-          }
-        }
-        return true;
-      }
-
-      // RELEASE: Finalize shape
-      else if (event->type() == QEvent::MouseButtonRelease && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
-        m_activeDrawItem = nullptr;  // Detach pointer, leave item on scene
+    if (m_currentMode == PresenterMode::Draw && m_pDrawingManager) {
+      if (m_pDrawingManager->handleViewportEvent(event, m_pView)) {
         return true;
       }
     }
@@ -753,6 +657,12 @@ void MainWindow::ungroupItems() {
     statusBar()->showMessage("Ungrouped items.", Constants::StatusMessageDuration);
 }
 
+void MainWindow::align() {
+  if (m_pScene) {
+    m_pScene->alignSelection(static_cast<LayoutScene::Alignment>(sender()->property("alignment").toInt()));
+  }
+}
+
 void MainWindow::toggleLock() {
   if (!m_pScene) {
     return;
@@ -871,42 +781,6 @@ void MainWindow::loadLayout() {
   }
 }
 
-void MainWindow::alignLeft() {
-  if (m_pScene) {
-    m_pScene->alignSelectionLeft();
-  }
-}
-
-void MainWindow::alignRight() {
-  if (m_pScene) {
-    m_pScene->alignSelectionRight();
-  }
-}
-
-void MainWindow::alignTop() {
-  if (m_pScene) {
-    m_pScene->alignSelectionTop();
-  }
-}
-
-void MainWindow::alignBottom() {
-  if (m_pScene) {
-    m_pScene->alignSelectionBottom();
-  }
-}
-
-void MainWindow::alignCenterH() {
-  if (m_pScene) {
-    m_pScene->alignSelectionCenterH();
-  }
-}
-
-void MainWindow::alignCenterV() {
-  if (m_pScene) {
-    m_pScene->alignSelectionCenterV();
-  }
-}
-
 void MainWindow::distributeH() {
   if (m_pScene) {
     m_pScene->distributeSelectionH();
@@ -1008,19 +882,47 @@ void MainWindow::createFloatingToolbar() {
   // Laser Connections
   connect(laserSlider, &QSlider::valueChanged, this, [this](int val) {
     m_laserSize = val;
-    if (m_laserDot)
-      m_laserDot->setSize(val);
-  });
-  connect(laserColorBtn, &QPushButton::clicked, this, [this, laserColorBtn]() {
-    QColor color = QColorDialog::getColor(m_laserColor, this, "Laser Color");
-    if (color.isValid()) {
-      m_laserColor = color;
-      laserColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(color.name()));
-      if (m_laserDot)
-        m_laserDot->setColor(color);
+    // Route to the new native scene laser
+    if (m_pScene) {
+      m_pScene->setLaserSize(val);
     }
   });
 
+  connect(laserColorBtn, &QPushButton::clicked, this, [this, laserColorBtn]() {
+    QColor color = QColorDialog::getColor(m_laserColor, this, "Laser Color", QColorDialog::DontUseNativeDialog);
+    if (color.isValid()) {
+      m_laserColor = color;
+      laserColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(color.name()));
+      if (m_pScene) {
+        m_pScene->setLaserColor(color);
+      }
+    }
+  });
+
+  connect(m_pBtnLaser, &QPushButton::toggled, this, [this](bool checked) {
+    if (checked) {
+      m_currentMode = PresenterMode::Laser;
+      m_pBtnEdit->setChecked(false);
+      m_pBtnDraw->setChecked(false);
+      if (m_laserSettingsWidget) {
+        m_laserSettingsWidget->show();
+        updatePopoutPositions();
+        m_laserSettingsWidget->raise();
+      }
+      if (m_pScene) {
+        m_pScene->setLaserActive(true);
+      }
+    } else {
+      if (m_laserSettingsWidget)
+        m_laserSettingsWidget->hide();
+
+      if (m_pScene) {
+        m_pScene->setLaserActive(false);
+      }
+      if (!m_pBtnDraw->isChecked())
+        m_pBtnEdit->setChecked(true);
+    }
+  });
   // ==========================================
   // 2. CREATE DRAW POPOUT
   // ==========================================
@@ -1051,14 +953,31 @@ void MainWindow::createFloatingToolbar() {
   drawLayout->addWidget(drawColorBtn);
 
   // Draw Connections
-  connect(shapeCombo, &QComboBox::currentIndexChanged, this,
-          [this, shapeCombo](int index) { m_currentShape = shapeCombo->itemData(index).value<DrawShape>(); });
-  connect(drawSlider, &QSlider::valueChanged, this, [this](int val) { m_drawSize = val; });
+  connect(shapeCombo, &QComboBox::currentIndexChanged, this, [this, shapeCombo](int index) {
+    m_currentShape = shapeCombo->itemData(index).value<DrawShape>();
+    // Sync with DrawingManager
+    if (m_pDrawingManager) {
+      m_pDrawingManager->setShape(static_cast<DrawingManager::Shape>(m_currentShape));
+    }
+  });
+
+  connect(drawSlider, &QSlider::valueChanged, this, [this](int val) {
+    m_drawSize = val;
+    // Sync with DrawingManager
+    if (m_pDrawingManager) {
+      m_pDrawingManager->setSize(val);
+    }
+  });
+
   connect(drawColorBtn, &QPushButton::clicked, this, [this, drawColorBtn]() {
     QColor color = QColorDialog::getColor(m_drawColor, this, "Draw Color");
     if (color.isValid()) {
       m_drawColor = color;
       drawColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(color.name()));
+      // Sync with DrawingManager
+      if (m_pDrawingManager) {
+        m_pDrawingManager->setColor(m_drawColor);
+      }
     }
   });
 
@@ -1070,36 +989,6 @@ void MainWindow::createFloatingToolbar() {
       // Programmatically turn off the others
       m_pBtnDraw->setChecked(false);
       m_pBtnLaser->setChecked(false);
-    }
-  });
-
-  // 2. Laser Pointer Button
-  connect(m_pBtnLaser, &QPushButton::toggled, this, [this](bool checked) {
-    if (checked) {
-      m_currentMode = PresenterMode::Laser;
-
-      // Programmatically turn off the others
-      m_pBtnEdit->setChecked(false);
-      m_pBtnDraw->setChecked(false);
-
-      if (m_laserSettingsWidget) {
-        m_laserSettingsWidget->show();
-        updatePopoutPositions();
-        m_laserSettingsWidget->raise();
-      }
-      if (m_laserDot)
-        m_laserDot->show();
-    } else {
-      // Clean up when turned off
-      if (m_laserSettingsWidget)
-        m_laserSettingsWidget->hide();
-      if (m_laserDot)
-        m_laserDot->hide();
-
-      // If the user manually turned the laser off, fall back to Edit mode
-      if (!m_pBtnDraw->isChecked()) {
-        m_pBtnEdit->setChecked(true);
-      }
     }
   });
 
@@ -1339,27 +1228,33 @@ void MainWindow::createToolbar() {
   m_pSectionAlign = ribbon->addSection("Alignment", QIcon(":/icons/section-alignment.svg"));
 
   QAction* al = new QAction(QIcon(":/icons/align-left.svg"), "Left", this);
-  connect(al, &QAction::triggered, this, &MainWindow::alignLeft);
+  al->setProperty("alignment", QVariant::fromValue(static_cast<int>(LayoutScene::Alignment::Left)));
+  connect(al, &QAction::triggered, this, &MainWindow::align);
   m_pSectionAlign->addWidget(new RibbonButton(al, RibbonButton::Small), 0, 0);
 
   QAction* ac = new QAction(QIcon(":/icons/align-center-h.svg"), "Center", this);
-  connect(ac, &QAction::triggered, this, &MainWindow::alignCenterH);
+  ac->setProperty("alignment", QVariant::fromValue(static_cast<int>(LayoutScene::Alignment::CenterH)));
+  connect(ac, &QAction::triggered, this, &MainWindow::align);
   m_pSectionAlign->addWidget(new RibbonButton(ac, RibbonButton::Small), 1, 0);
 
   QAction* ar = new QAction(QIcon(":/icons/align-right.svg"), "Right", this);
-  connect(ar, &QAction::triggered, this, &MainWindow::alignRight);
+  ar->setProperty("alignment", QVariant::fromValue(static_cast<int>(LayoutScene::Alignment::Right)));
+  connect(ar, &QAction::triggered, this, &MainWindow::align);
   m_pSectionAlign->addWidget(new RibbonButton(ar, RibbonButton::Small), 2, 0);
 
   QAction* at = new QAction(QIcon(":/icons/align-top.svg"), "Top", this);
-  connect(at, &QAction::triggered, this, &MainWindow::alignTop);
+  at->setProperty("alignment", QVariant::fromValue(static_cast<int>(LayoutScene::Alignment::Top)));
+  connect(at, &QAction::triggered, this, &MainWindow::align);
   m_pSectionAlign->addWidget(new RibbonButton(at, RibbonButton::Small), 0, 1);
 
   QAction* am = new QAction(QIcon(":/icons/align-center-v.svg"), "Middle", this);
-  connect(am, &QAction::triggered, this, &MainWindow::alignCenterV);
+  am->setProperty("alignment", QVariant::fromValue(static_cast<int>(LayoutScene::Alignment::CenterV)));
+  connect(am, &QAction::triggered, this, &MainWindow::align);
   m_pSectionAlign->addWidget(new RibbonButton(am, RibbonButton::Small), 1, 1);
 
   QAction* ab = new QAction(QIcon(":/icons/align-bottom.svg"), "Bottom", this);
-  connect(ab, &QAction::triggered, this, &MainWindow::alignBottom);
+  ab->setProperty("alignment", QVariant::fromValue(static_cast<int>(LayoutScene::Alignment::Bottom)));
+  connect(ab, &QAction::triggered, this, &MainWindow::align);
   m_pSectionAlign->addWidget(new RibbonButton(ab, RibbonButton::Small), 2, 1);
 
   // --- SECTION: VIEW ---

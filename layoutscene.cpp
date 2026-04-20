@@ -1,10 +1,8 @@
 #include "layoutscene.h"
 #include "constants.h"
-#include "guidelineitem.h"
 #include "resizableappitem.h"
 #include "snappingitemgroup.h"
 #include "snappingutils.h"
-#include "zoneitem.h"
 
 #include <QGraphicsRectItem>
 #include <QLineF>
@@ -134,6 +132,9 @@ LayoutScene::LayoutScene(qreal x, qreal y, qreal w, qreal h, QObject* parent)
   m_pBgItem = bg;
 
   connect(&m_gridWatcher, &QFutureWatcher<QVector<QLineF>>::finished, this, &LayoutScene::onGridCalculationFinished);
+
+  connect(&m_laserTimer, &QTimer::timeout, this, &LayoutScene::fadeLaserTrail);
+  m_laserTimer.start(16);
 }
 
 bool LayoutScene::isGridEnabled() const {
@@ -199,6 +200,44 @@ void LayoutScene::triggerGridUpdate() {
   }
 }
 
+void LayoutScene::applyAlignment(std::function<qreal(const QRectF&)> getEdge, bool isHorizontal) {
+  auto validItems = getAlignableItems(selectedItems());
+  if (validItems.isEmpty()) {
+    return;
+  }
+
+  qreal targetValue;
+
+  // 1. Determine the target edge/center to align to
+  if (validItems.size() == 1) {
+    // Single item snaps to the workspace bounds
+    targetValue = getEdge(getWorkingArea());
+  } else {
+    // Multiple items snap to the outer bounds of their united group
+    QRectF totalRect;
+    bool first = true;
+    for (auto item : std::as_const(validItems)) {
+      if (first) {
+        totalRect = item->sceneBoundingRect();
+        first = false;
+      } else {
+        totalRect = totalRect.united(item->sceneBoundingRect());
+      }
+    }
+    targetValue = getEdge(totalRect);
+  }
+
+  // 2. Apply the calculated difference to every valid item
+  for (auto item : std::as_const(validItems)) {
+    qreal diff = targetValue - getEdge(item->sceneBoundingRect());
+    if (isHorizontal) {
+      item->moveBy(diff, 0);
+    } else {
+      item->moveBy(0, diff);
+    }
+  }
+}
+
 void LayoutScene::onGridCalculationFinished() {
   m_cachedGridLines = m_gridWatcher.result();
   if (m_pBgItem) {
@@ -211,31 +250,69 @@ void LayoutScene::onGridCalculationFinished() {
 void LayoutScene::drawForeground(QPainter* painter, const QRectF& rect) {
   Q_UNUSED(rect);
 
-  if (m_snapGuides.isEmpty()) {
-    return;
-  }
+  // 1. Draw Snap Guides
+  if (!m_snapGuides.isEmpty()) {
+    painter->save();
 
-  painter->save();
+    QPen pen(QColor::fromRgba(Constants::Color::SmartSnapGuide), 1, Qt::DashLine);
+    painter->setPen(pen);
 
-  QPen pen(QColor::fromRgba(Constants::Color::SmartSnapGuide), 1, Qt::DashLine);
-  painter->setPen(pen);
+    for (const QLineF& line : std::as_const(m_snapGuides)) {
+      QLineF drawnLine = line;
+      QRectF bounds = sceneRect();
 
-  for (const QLineF& line : m_snapGuides) {
-    QLineF drawnLine = line;
-    QRectF bounds = sceneRect();
+      if (line.dx() == 0) {
+        drawnLine.setP1(QPointF(line.x1(), bounds.top()));
+        drawnLine.setP2(QPointF(line.x1(), bounds.bottom()));
+      } else {
+        drawnLine.setP1(QPointF(bounds.left(), line.y1()));
+        drawnLine.setP2(QPointF(bounds.right(), line.y1()));
+      }
 
-    if (line.dx() == 0) {
-      drawnLine.setP1(QPointF(line.x1(), bounds.top()));
-      drawnLine.setP2(QPointF(line.x1(), bounds.bottom()));
-    } else {
-      drawnLine.setP1(QPointF(bounds.left(), line.y1()));
-      drawnLine.setP2(QPointF(bounds.right(), line.y1()));
+      painter->drawLine(drawnLine);
     }
 
-    painter->drawLine(drawnLine);
+    painter->restore();
   }
 
-  painter->restore();
+  // 2. Draw Laser Pointer
+  if (m_laserActive || !m_laserTrail.isEmpty()) {
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+
+    if (!m_laserTrail.isEmpty()) {
+      QPointF prev = m_laserPos;
+      for (int i = 0; i < m_laserTrail.size(); ++i) {
+        int age = m_laserTrail[i].age;
+        int alpha = qMax(0, 180 - (age * 12));
+        qreal thickness = qMax(1.0, m_laserSize - (age / 2.0));
+
+        QColor c(m_laserColor);
+        c.setAlpha(alpha);
+        QPen pen(c);
+        pen.setWidthF(thickness);
+        pen.setCapStyle(Qt::RoundCap);
+
+        painter->setPen(pen);
+        painter->drawLine(prev, m_laserTrail[i].pos);
+        prev = m_laserTrail[i].pos;
+      }
+    }
+
+    if (m_laserActive) {
+      QRadialGradient grad(m_laserPos, 12);
+      grad.setColorAt(0.0, Qt::white);
+      grad.setColorAt(0.3, m_laserColor);
+      QColor fadeColor(m_laserColor);
+      fadeColor.setAlpha(0);
+      grad.setColorAt(1.0, fadeColor);
+
+      painter->setPen(Qt::NoPen);
+      painter->setBrush(grad);
+      painter->drawEllipse(m_laserPos, 12, 12);
+    }
+    painter->restore();
+  }
 }
 
 void LayoutScene::clearLayout() {
@@ -265,157 +342,6 @@ ResizableAppItem* LayoutScene::addAppItem(const QString& name, const QRectF& rec
   return item;
 }
 
-void LayoutScene::alignSelectionLeft() {
-  auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty()) {
-    return;
-  }
-
-  if (validItems.size() == 1) {
-    QRectF safe = getWorkingArea();
-    validItems.first()->moveBy(safe.left() - validItems.first()->sceneBoundingRect().left(), 0);
-    return;
-  }
-
-  qreal minX = std::numeric_limits<qreal>::max();
-  for (auto item : validItems) {
-    minX = std::min(minX, item->sceneBoundingRect().left());
-  }
-
-  for (auto item : validItems) {
-    item->moveBy(minX - item->sceneBoundingRect().left(), 0);
-  }
-}
-
-void LayoutScene::alignSelectionRight() {
-  auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty()) {
-    return;
-  }
-
-  if (validItems.size() == 1) {
-    QRectF safe = getWorkingArea();
-    validItems.first()->moveBy(safe.right() - validItems.first()->sceneBoundingRect().right(), 0);
-    return;
-  }
-
-  qreal targetX = -std::numeric_limits<qreal>::max();
-  for (auto item : validItems) {
-    targetX = std::max(targetX, item->sceneBoundingRect().right());
-  }
-
-  for (auto item : validItems) {
-    qreal diff = targetX - item->sceneBoundingRect().right();
-    item->moveBy(diff, 0);
-  }
-}
-
-void LayoutScene::alignSelectionTop() {
-  auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty()) {
-    return;
-  }
-
-  if (validItems.size() == 1) {
-    QRectF safe = getWorkingArea();
-    validItems.first()->moveBy(0, safe.top() - validItems.first()->sceneBoundingRect().top());
-    return;
-  }
-
-  qreal minY = std::numeric_limits<qreal>::max();
-  for (auto item : validItems) {
-    minY = std::min(minY, item->sceneBoundingRect().top());
-  }
-
-  for (auto item : validItems) {
-    qreal diff = minY - item->sceneBoundingRect().top();
-    item->moveBy(0, diff);
-  }
-}
-
-void LayoutScene::alignSelectionBottom() {
-  auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty()) {
-    return;
-  }
-
-  if (validItems.size() == 1) {
-    QRectF safe = getWorkingArea();
-    validItems.first()->moveBy(0, safe.bottom() - validItems.first()->sceneBoundingRect().bottom());
-    return;
-  }
-
-  qreal targetY = -std::numeric_limits<qreal>::max();
-  for (auto item : validItems) {
-    targetY = std::max(targetY, item->sceneBoundingRect().bottom());
-  }
-
-  for (auto item : validItems) {
-    qreal diff = targetY - item->sceneBoundingRect().bottom();
-    item->moveBy(0, diff);
-  }
-}
-
-void LayoutScene::alignSelectionCenterH() {
-  auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty()) {
-    return;
-  }
-
-  if (validItems.size() == 1) {
-    QRectF safe = getWorkingArea();
-    qreal targetCenter = safe.center().x();
-    qreal currentCenter = validItems.first()->sceneBoundingRect().center().x();
-    validItems.first()->moveBy(targetCenter - currentCenter, 0);
-    return;
-  }
-  QRectF totalRect;
-  bool first = true;
-  for (auto item : validItems) {
-    if (first) {
-      totalRect = item->sceneBoundingRect();
-      first = false;
-    } else {
-      totalRect = totalRect.united(item->sceneBoundingRect());
-    }
-  }
-  qreal centerX = totalRect.center().x();
-  for (auto item : validItems) {
-    qreal itemCenter = item->sceneBoundingRect().center().x();
-    item->moveBy(centerX - itemCenter, 0);
-  }
-}
-
-void LayoutScene::alignSelectionCenterV() {
-  auto validItems = getAlignableItems(selectedItems());
-  if (validItems.isEmpty()) {
-    return;
-  }
-
-  if (validItems.size() == 1) {
-    QRectF safe = getWorkingArea();
-    qreal targetCenter = safe.center().y();
-    qreal currentCenter = validItems.first()->sceneBoundingRect().center().y();
-    validItems.first()->moveBy(0, targetCenter - currentCenter);
-    return;
-  }
-  QRectF totalRect;
-  bool first = true;
-  for (auto item : validItems) {
-    if (first) {
-      totalRect = item->sceneBoundingRect();
-      first = false;
-    } else {
-      totalRect = totalRect.united(item->sceneBoundingRect());
-    }
-  }
-  qreal centerY = totalRect.center().y();
-  for (auto item : validItems) {
-    qreal itemCenter = item->sceneBoundingRect().center().y();
-    item->moveBy(0, centerY - itemCenter);
-  }
-}
-
 void LayoutScene::distributeSelectionH() {
   auto sel = getAlignableItems(selectedItems());
   if (sel.size() < 3) {
@@ -426,7 +352,7 @@ void LayoutScene::distributeSelectionH() {
   QGraphicsItem* first = sel.first();
   QGraphicsItem* last = sel.last();
   qreal totalItemWidth = 0;
-  for (auto item : sel) {
+  for (auto item : std::as_const(sel)) {
     totalItemWidth += item->sceneBoundingRect().width();
   }
 
@@ -436,7 +362,7 @@ void LayoutScene::distributeSelectionH() {
   qreal totalGapSpace = totalSpan - totalItemWidth;
   qreal gap = totalGapSpace / (sel.size() - 1);
   qreal currentX = startX;
-  for (auto item : sel) {
+  for (auto item : std::as_const(sel)) {
     qreal currentItemX = item->sceneBoundingRect().x();
     item->moveBy(currentX - currentItemX, 0);
     currentX += item->sceneBoundingRect().width() + gap;
@@ -453,7 +379,7 @@ void LayoutScene::distributeSelectionV() {
   QGraphicsItem* first = sel.first();
   QGraphicsItem* last = sel.last();
   qreal totalItemHeight = 0;
-  for (auto item : sel) {
+  for (auto item : std::as_const(sel)) {
     totalItemHeight += item->sceneBoundingRect().height();
   }
 
@@ -463,9 +389,78 @@ void LayoutScene::distributeSelectionV() {
   qreal totalGapSpace = totalSpan - totalItemHeight;
   qreal gap = totalGapSpace / (sel.size() - 1);
   qreal currentY = startY;
-  for (auto item : sel) {
+  for (auto item : std::as_const(sel)) {
     qreal currentItemY = item->sceneBoundingRect().y();
     item->moveBy(0, currentY - currentItemY);
     currentY += item->sceneBoundingRect().height() + gap;
+  }
+}
+
+void LayoutScene::setLaserActive(bool active) {
+  m_laserActive = active;
+  if (!active)
+    m_laserTrail.clear();
+  invalidate(sceneRect(), QGraphicsScene::ForegroundLayer);
+}
+
+void LayoutScene::updateLaserPosition(const QPointF& pos) {
+  if (!m_laserActive)
+    return;
+  if (m_laserTrail.isEmpty() || QLineF(m_laserPos, pos).length() > 2.0) {
+    m_laserTrail.prepend({m_laserPos, 0});
+    if (m_laserTrail.size() > 15)
+      m_laserTrail.removeLast();
+  }
+  m_laserPos = pos;
+  invalidate(sceneRect(), QGraphicsScene::ForegroundLayer);
+}
+
+void LayoutScene::setLaserColor(const QColor& color) {
+  m_laserColor = color;
+}
+void LayoutScene::setLaserSize(int size) {
+  m_laserSize = size;
+}
+
+void LayoutScene::alignSelection(Alignment alignment) {
+  switch (alignment) {
+    case Left:
+      applyAlignment([](const QRectF& r) { return r.left(); }, true);
+      break;
+    case Right:
+      applyAlignment([](const QRectF& r) { return r.right(); }, true);
+      break;
+    case CenterH:
+      applyAlignment([](const QRectF& r) { return r.center().x(); }, true);
+      break;
+    case Top:
+      applyAlignment([](const QRectF& r) { return r.top(); }, false);
+      break;
+    case Bottom:
+      applyAlignment([](const QRectF& r) { return r.bottom(); }, false);
+      break;
+    case CenterV:
+      applyAlignment([](const QRectF& r) { return r.center().y(); }, false);
+      break;
+  }
+}
+
+void LayoutScene::fadeLaserTrail() {
+  if (!m_laserActive && m_laserTrail.isEmpty())
+    return;
+
+  bool needsUpdate = false;
+  for (int i = 0; i < m_laserTrail.size(); ++i) {
+    m_laserTrail[i].age++;
+    if (m_laserTrail[i].age > 15) {
+      m_laserTrail.removeAt(i);
+      i--;
+    } else {
+      needsUpdate = true;
+    }
+  }
+  if (needsUpdate || m_laserActive) {
+    // Fast, partial screen invalidation
+    invalidate(sceneRect(), QGraphicsScene::ForegroundLayer);
   }
 }
