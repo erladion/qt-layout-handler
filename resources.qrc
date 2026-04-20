@@ -29,5 +29,11 @@
         <file>icons/section-file.svg</file>
         <file>icons/section-insert.svg</file>
         <file>icons/close.svg</file>
+        <file>icons/clear.svg</file>
+        <file>icons/draw.svg</file>
+        <file>icons/laser.svg</file>
+        <file>icons/mirror.svg</file>
+        <file>icons/move.svg</file>
+        <file>icons/output.svg</file>
     </qresource>
 </RCC>

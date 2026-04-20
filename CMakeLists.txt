@@ -12,15 +12,54 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Xml)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Xml)
 
-find_package(X11 REQUIRED)
+if (WIN32)
+    # ==========================================
+    # WINDOWS GSTREAMER SETUP
+    # ==========================================
+    # The official GStreamer Windows installer sets an environment variable.
+    # Change MSVC to MINGW below if you are using the MinGW compiler instead!
+    set(GST_ROOT $ENV{GSTREAMER_1_0_ROOT_MINGW_X86_64})
 
-find_package(PkgConfig REQUIRED)
+    if (NOT GST_ROOT)
+        message(FATAL_ERROR "GStreamer environment variable not found! Did you install the GStreamer Windows development package?")
+    endif()
 
-pkg_check_modules(GST REQUIRED
-    gstreamer-1.0
-    gstreamer-video-1.0
-    gstreamer-app-1.0
-)
+    # 1. Set the Include Directories
+    set(GST_INCLUDE_DIRS
+        "${GST_ROOT}/include/gstreamer-1.0"
+        "${GST_ROOT}/include/glib-2.0"
+        "${GST_ROOT}/lib/glib-2.0/include"
+    )
+
+    # 2. Find the specific Library files (.lib or .a)
+    find_library(GST_LIB_CORE  NAMES gstreamer-1.0 PATHS "${GST_ROOT}/lib" REQUIRED)
+    find_library(GST_LIB_VIDEO NAMES gstvideo-1.0  PATHS "${GST_ROOT}/lib" REQUIRED)
+    find_library(GST_LIB_APP   NAMES gstapp-1.0    PATHS "${GST_ROOT}/lib" REQUIRED)
+    find_library(GLIB_LIB      NAMES glib-2.0      PATHS "${GST_ROOT}/lib" REQUIRED)
+    find_library(GOBJECT_LIB   NAMES gobject-2.0   PATHS "${GST_ROOT}/lib" REQUIRED)
+
+    # Bundle them into the same variable name Linux uses
+    set(GST_LIBRARIES
+        ${GST_LIB_CORE}
+        ${GST_LIB_VIDEO}
+        ${GST_LIB_APP}
+        ${GLIB_LIB}
+        ${GOBJECT_LIB}
+    )
+elseif (UNIX AND NOT APPLE)
+    # ==========================================
+    # LINUX GSTREAMER & X11 SETUP
+    # ==========================================
+    find_package(X11 REQUIRED)
+    find_package(PkgConfig REQUIRED)
+
+    pkg_check_modules(GST REQUIRED
+        gstreamer-1.0
+        gstreamer-video-1.0
+        gstreamer-app-1.0
+    )
+endif()
+
 
 set(PROJECT_SOURCES
         main.cpp
@@ -77,9 +116,22 @@ endif()
 
 qt_add_resources(resources.qrc)
 
-target_include_directories(layouteditor PRIVATE ${GST_INCLUDE_DIRS})
+target_include_directories(layouteditor PRIVATE
+    ${GST_INCLUDE_DIRS}
+)
 
-target_link_libraries(layouteditor PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::OpenGLWidgets Qt${QT_VERSION_MAJOR}::Xml ${GST_LIBRARIES} X11::X11)
+target_link_libraries(layouteditor PRIVATE
+    Qt${QT_VERSION_MAJOR}::Core
+    Qt${QT_VERSION_MAJOR}::Gui
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::OpenGLWidgets
+    Qt${QT_VERSION_MAJOR}::Xml
+    ${GST_LIBRARIES}
+)
+
+if (UNIX AND NOT APPLE)
+    target_link_libraries(layouteditor PRIVATE X11::X11)
+endif()
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
@@ -101,6 +153,11 @@ install(TARGETS layouteditor
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+
+if(MSVC)
+    target_compile_options(layouteditor PRIVATE /Zc:lambda /permissive- /Zc:__cplusplus)
+endif()
 
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(layouteditor)

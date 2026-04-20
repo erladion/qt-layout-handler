@@ -29,7 +29,7 @@ public:
   int cropRight() const { return m_cropRight; }
 
 protected:
-  void setupCustomActions() override;
+  void setupCustomActions();
   void updateStatusText() override;
 
 private:

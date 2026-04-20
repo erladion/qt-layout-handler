@@ -93,6 +93,7 @@ private:
 
   // Define our three operating modes
   enum class PresenterMode { EditLayout, Draw, Laser };
+  enum class DrawShape { Freehand, Marker, Rectangle, Ellipse };
 
   LayoutScene* m_pScene;
   QGraphicsView* m_pView;
@@ -148,6 +149,22 @@ private:
   ProjectorWindow* m_pProjector = nullptr;
 
   bool m_isSelectingWindow = false;
+
+  DrawShape m_currentShape = DrawShape::Freehand;
+  QColor m_laserColor = Qt::red;
+  int m_laserSize = 15;
+
+  QColor m_drawColor = Qt::blue;
+  int m_drawSize = 4;
+
+  QWidget* m_laserSettingsWidget = nullptr;
+  QWidget* m_drawSettingsWidget = nullptr;
+
+  void updatePopoutPositions();
+
+  QPointF m_drawStartPos;
+  QGraphicsItem* m_activeDrawItem = nullptr;
+  QList<QGraphicsItem*> m_drawnItems;
 };
 
 #endif  // MAINWINDOW_H

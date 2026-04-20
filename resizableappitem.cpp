@@ -89,28 +89,25 @@ void ResizableAppItem::updateStatusText() {
 }
 
 void ResizableAppItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
-  QMenu menu;
-  QAction* lockAction = menu.addAction(m_locked ? "Unlock" : "Lock");
-  menu.addSeparator();
-  QAction* raiseAction = menu.addAction("Bring to Front");
-  QAction* lowerAction = menu.addAction("Send to Back");
-  menu.addSeparator();
-  QAction* removeAction = menu.addAction("Remove");
+  m_pContextMenu.popup(QCursor::pos());
+}
 
-  QAction* selectedAction = menu.exec(event->screenPos());
-
-  if (selectedAction == lockAction) {
-    setLocked(!m_locked);
-  } else if (selectedAction == raiseAction) {
-    setZValue(100);
-  } else if (selectedAction == lowerAction) {
-    setZValue(-1);
-  } else if (selectedAction == removeAction) {
+void ResizableAppItem::setupCustomActions() {
+  QAction* lockAction = m_pContextMenu.addAction(m_locked ? "Unlock" : "Lock");
+  connect(lockAction, &QAction::triggered, this, [&]() { setLocked(!m_locked); });
+  m_pContextMenu.addSeparator();
+  QAction* raiseAction = m_pContextMenu.addAction("Bring to Front");
+  connect(raiseAction, &QAction::triggered, this, [&]() { setZValue(100); });
+  QAction* lowerAction = m_pContextMenu.addAction("Send to Back");
+  connect(lowerAction, &QAction::triggered, this, [&]() { setZValue(-1); });
+  m_pContextMenu.addSeparator();
+  QAction* removeAction = m_pContextMenu.addAction("Remove");
+  connect(removeAction, &QAction::triggered, this, [&]() {
     if (scene()) {
       scene()->removeItem(this);
-      delete this;
+      this->deleteLater();
     }
-  }
+  });
 }
 
 void ResizableAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
@@ -390,12 +387,12 @@ void ResizableAppItem::initActions() {
     this->deleteLater();  // Safe Deletion
   });
 
-  m_contextActions.append(propAction);
-  m_contextActions.append(removeAction);
+  m_pContextMenu.addAction(propAction);
+  m_pContextMenu.addAction(removeAction);
 
   QAction* sep = new QAction(this);
   sep->setSeparator(true);
-  m_contextActions.append(sep);
+  m_pContextMenu.addAction(sep);
 
   setupCustomActions();  // Let derived classes inject actions
 }

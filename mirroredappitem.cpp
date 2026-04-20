@@ -38,6 +38,8 @@ MirroredAppItem::MirroredAppItem(const QString& captureSource)
   m_pRenderTimer->start(16);  // 60 FPS UI polling
 
   rebuildPipeline();
+
+  setupCustomActions();
 }
 
 MirroredAppItem::~MirroredAppItem() {
@@ -59,9 +61,11 @@ MirroredAppItem::~MirroredAppItem() {
 }
 
 QString MirroredAppItem::generatePipelineString() {
-  // Notice %1 is now the full capture string (e.g., gdiscreencapsrc or ximagesrc)
+  // THE FIX: Added videoconvert and videorate right after the source
   QString baseStr = QString(
                         "%1 ! "
+                        "videoconvert ! "
+                        "videorate ! "
                         "video/x-raw,framerate=30/1 ! "
                         "videocrop name=mycrop top=%2 bottom=%3 left=%4 right=%5 ! ")
                         .arg(m_captureSource)
@@ -103,7 +107,41 @@ void MirroredAppItem::rebuildPipeline() {
     g_signal_connect(sink, "new-sample", G_CALLBACK(onNewSample), this);
     gst_object_unref(sink);
   }
+  // 1. Start the pipeline
   gst_element_set_state(m_pipeline, GST_STATE_PLAYING);
+
+  // ==========================================
+  // 2. TEMPORARY DEBUG TRAP
+  // ==========================================
+  // Wait for up to 1 second to see if GStreamer immediately panics
+  GstBus* bus = gst_element_get_bus(m_pipeline);
+  GstMessage* msg = gst_bus_timed_pop_filtered(bus, GST_SECOND * 1, (GstMessageType)(GST_MESSAGE_ERROR | GST_MESSAGE_EOS | GST_MESSAGE_WARNING));
+
+  if (msg != nullptr) {
+    if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR) {
+      GError* err;
+      gchar* debug_info;
+      gst_message_parse_error(msg, &err, &debug_info);
+      qDebug() << "GSTREAMER FATAL ERROR:" << err->message;
+      qDebug() << "Debug Info:" << (debug_info ? debug_info : "none");
+      g_error_free(err);
+      g_free(debug_info);
+    } else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_WARNING) {
+      GError* err;
+      gchar* debug_info;
+      gst_message_parse_warning(msg, &err, &debug_info);
+      qDebug() << "GSTREAMER WARNING:" << err->message;
+      g_error_free(err);
+      g_free(debug_info);
+    } else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_EOS) {
+      qDebug() << "GSTREAMER EOS: The stream ended immediately. gdiscreencapsrc could not bind to the window.";
+    }
+    gst_message_unref(msg);
+  } else {
+    qDebug() << "GStreamer started successfully. No immediate errors.";
+  }
+  gst_object_unref(bus);
+  // ==========================================
 }
 
 void MirroredAppItem::setupCustomActions() {
@@ -122,7 +160,7 @@ void MirroredAppItem::setupCustomActions() {
       rebuildPipeline();
     }
   });
-  m_contextActions.append(recordAction);
+  m_pContextMenu.addAction(recordAction);
 }
 
 void MirroredAppItem::updateCropValues(int top, int bottom, int left, int right) {
@@ -202,6 +240,10 @@ void MirroredAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* o
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
     painter->drawImage(rect(), frameToDraw);
     painter->restore();
+  } else {
+    painter->fillRect(rect(), QColor(40, 40, 40, 200));
+    painter->setPen(Qt::white);
+    painter->drawText(rect(), Qt::AlignCenter, "Waiting for Video Feed...");
   }
 
   QBrush originalBrush = brush();

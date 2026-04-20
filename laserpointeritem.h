@@ -16,6 +16,9 @@ public:
 
   void updatePosition(const QPointF& pos);
 
+  void setColor(const QColor& color);
+  void setSize(qreal size);
+
 private slots:
   void fadeTrail();
 
@@ -27,7 +30,10 @@ private:
 
   QPointF m_headPos;
   QList<TrailPoint> m_trail;
-  QTimer* m_timer;
+  QTimer m_timer;
+
+  QColor m_color = Qt::red;
+  qreal m_size = 10.0;  // Radius of the laser
 };
 
-#endif // LASERPOINTERITEM_H
+#endif  // LASERPOINTERITEM_H

@@ -1,4 +1,5 @@
 #include "laserpointeritem.h"
+
 #include <QLineF>
 #include <QPainter>
 #include <QRadialGradient>
@@ -7,9 +8,8 @@ LaserPointerItem::LaserPointerItem(QGraphicsItem* parent) : QGraphicsObject(pare
   setZValue(9999);
 
   // Run a 60 FPS timer to handle the fading animation smoothly
-  m_timer = new QTimer(this);
-  connect(m_timer, &QTimer::timeout, this, &LaserPointerItem::fadeTrail);
-  m_timer->start(16);
+  connect(&m_timer, &QTimer::timeout, this, &LaserPointerItem::fadeTrail);
+  m_timer.start(16);
 }
 
 void LaserPointerItem::updatePosition(const QPointF& pos) {
@@ -27,6 +27,17 @@ void LaserPointerItem::updatePosition(const QPointF& pos) {
   }
 
   m_headPos = pos;
+}
+
+void LaserPointerItem::setColor(const QColor& color) {
+  m_color = color;
+  update();
+}
+
+void LaserPointerItem::setSize(qreal size) {
+  prepareGeometryChange();  // CRITICAL: Tells Qt the bounding box is changing
+  m_size = size;
+  update();
 }
 
 void LaserPointerItem::fadeTrail() {
@@ -99,9 +110,12 @@ void LaserPointerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
 
       // Fade out opacity and shrink thickness as it gets older
       int alpha = qMax(0, 180 - (age * 12));
-      qreal thickness = qMax(1.0, 8.0 - (age / 2.0));
+      qreal thickness = qMax(1.0, m_size - (age / 2.0));
 
-      QPen pen(QColor(255, 0, 0, alpha));
+      QColor c(m_color);
+      c.setAlpha(alpha);
+
+      QPen pen(c);
       pen.setWidthF(thickness);
       pen.setCapStyle(Qt::RoundCap);
 
@@ -115,8 +129,10 @@ void LaserPointerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
   // 2. Draw the Glowing Head
   QRadialGradient grad(m_headPos, 12);
   grad.setColorAt(0.0, QColor(255, 255, 255, 255));  // Hot white core
-  grad.setColorAt(0.3, QColor(255, 0, 0, 255));      // Red laser diode
-  grad.setColorAt(1.0, QColor(255, 0, 0, 0));        // Soft edge fade
+  grad.setColorAt(0.3, m_color);                     // Red laser diode
+  QColor fadeColor(m_color);
+  fadeColor.setAlpha(0);
+  grad.setColorAt(1.0, fadeColor);  // Soft edge fade
 
   painter->setPen(Qt::NoPen);
   painter->setBrush(grad);

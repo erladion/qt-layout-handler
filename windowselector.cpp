@@ -12,27 +12,47 @@ WindowSelector::WindowSelector(QObject* parent) : QObject(parent) {}
 
 void WindowSelector::captureWindowUnderCursor() {
 #ifdef Q_OS_WIN
-  // ==========================================
-  // WINDOWS IMPLEMENTATION
-  // ==========================================
   QPoint mousePos = QCursor::pos();
   POINT pt = {mousePos.x(), mousePos.y()};
   HWND targetHwnd = WindowFromPoint(pt);
 
   if (targetHwnd) {
-    // Get the main parent window, not just a sub-widget
-    HWND rootHwnd = GetAncestor(targetHwnd, GA_ROOT);
+    // Climb the tree to find the top-most parent that is VISIBLE
+    HWND currentHwnd = targetHwnd;
+    HWND bestHwnd = NULL;
 
-    char windowTitle[256];
-    GetWindowTextA(rootHwnd, windowTitle, sizeof(windowTitle));
+    while (currentHwnd != NULL) {
+      int length = GetWindowTextLengthA(currentHwnd);
+      if (IsWindowVisible(currentHwnd) && length > 0) {
+        bestHwnd = currentHwnd;
+      }
+      currentHwnd = GetParent(currentHwnd);
+    }
 
-    qDebug() << "Captured Windows HWND:" << rootHwnd << "Title:" << windowTitle;
+    if (!bestHwnd) {
+      bestHwnd = GetAncestor(targetHwnd, GA_ROOT);
+    }
 
-    // Build the Windows-specific GStreamer capture element
-    QString captureSource = QString("gdiscreencapsrc window-name=\"%1\"").arg(windowTitle);
+    // We only grab the title now to print it to your debug console
+    WCHAR windowTitle[256];
+    GetWindowTextW(bestHwnd, windowTitle, sizeof(windowTitle));
+    QString titleStr = QString::fromWCharArray(windowTitle);
+    titleStr.replace("\"", "");
+    qDebug() << "Captured Windows HWND:" << bestHwnd << "Title:" << windowTitle << titleStr;
+
+    // THE UPGRADE:
+    // We cast the HWND pointer into a 64-bit integer to feed it to GStreamer
+    quint64 hwndInt = static_cast<quint64>(reinterpret_cast<quintptr>(bestHwnd));
+
+    // Build the modern hardware-accelerated pipeline!
+    // Note: capture-api=wgc (Windows Graphics Capture) is required to target
+    // specific application windows rather than the whole monitor.
+    // QString captureSource = QString("d3d11screencapturesrc capture-api=wgc window-handle=%1").arg(hwndInt);
+    // emit windowSelectedForGStreamer(captureSource);
+
+    QString captureSource = QStringLiteral("gdiscreencapsrc");
     emit windowSelectedForGStreamer(captureSource);
   }
-
 #elif defined(Q_OS_LINUX)
   // ==========================================
   // LINUX X11 IMPLEMENTATION

@@ -2,6 +2,7 @@
 #define RESIZABLEAPPITEM_H
 
 #include <QGraphicsRectItem>
+#include <QMenu>
 #include <QObject>
 
 #include "constants.h"
@@ -44,9 +45,9 @@ protected:
 
   void contextMenuEvent(QGraphicsSceneContextMenuEvent* event) override;
 
-  virtual void setupCustomActions() {}  // NVI Hook
+  void setupCustomActions();
 
-  QList<QAction*> m_contextActions;
+  QMenu m_pContextMenu;
   double m_targetAspectRatio = -1.0;
   bool m_aspectRatioEnabled = false;
   QGraphicsTextItem* m_pStatusText;
