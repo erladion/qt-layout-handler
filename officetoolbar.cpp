@@ -212,7 +212,7 @@ void RibbonSection::setMode(Mode mode) {
     m_pTitleLabel->show();
 
     QList<RibbonButton*> btns = m_pContentWidget->findChildren<RibbonButton*>();
-    for (auto btn : btns) {
+    for (auto btn : std::as_const(btns)) {
       btn->setCompactMode(false);
     }
   } else if (m_mode == Compact) {
@@ -221,7 +221,7 @@ void RibbonSection::setMode(Mode mode) {
     m_pTitleLabel->show();
 
     QList<RibbonButton*> btns = m_pContentWidget->findChildren<RibbonButton*>();
-    for (auto btn : btns) {
+    for (auto btn : std::as_const(btns)) {
       btn->setCompactMode(true);
     }
   } else if (m_mode == Collapsed) {
@@ -248,7 +248,7 @@ void RibbonSection::onCollapseButtonClicked() {
   }
 
   QList<RibbonButton*> btns = m_pContentWidget->findChildren<RibbonButton*>();
-  for (auto btn : btns) {
+  for (auto btn : std::as_const(btns)) {
     btn->setCompactMode(false);
   }
 
@@ -350,7 +350,7 @@ void OfficeToolbar::layoutSections() {
   int wAllCompact = 0;
   int wAllCollapsed = 0;
 
-  for (auto sec : m_sections) {
+  for (auto sec : std::as_const(m_sections)) {
     wAllNormal += sec->estimateWidth(RibbonSection::Normal);
     wAllCompact += sec->estimateWidth(RibbonSection::Compact);
     wAllCollapsed += sec->estimateWidth(RibbonSection::Collapsed);
@@ -361,11 +361,11 @@ void OfficeToolbar::layoutSections() {
   wAllCollapsed += sepWidth;
 
   if (availableWidth >= wAllNormal) {
-    for (auto sec : m_sections) {
+    for (auto sec : std::as_const(m_sections)) {
       sec->setMode(RibbonSection::Normal);
     }
   } else if (availableWidth >= wAllCompact) {
-    for (auto sec : m_sections) {
+    for (auto sec : std::as_const(m_sections)) {
       sec->setMode(RibbonSection::Compact);
     }
   } else {

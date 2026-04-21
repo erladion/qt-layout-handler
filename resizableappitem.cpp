@@ -204,7 +204,7 @@ void ResizableAppItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
 
     if (m_resizeHandle == None && !m_locked && parentItem() == nullptr) {
       QList<QGraphicsItem*> itemsUnderMouse = scene()->items(event->scenePos());
-      for (QGraphicsItem* item : itemsUnderMouse) {
+      for (QGraphicsItem* item : std::as_const(itemsUnderMouse)) {
         if (item->type() == Constants::Item::ZoneItem) {
           ZoneItem* zone = static_cast<ZoneItem*>(item);
           setRect(zone->rect());
@@ -259,7 +259,7 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     QList<QGraphicsItem*> candidates = SnappingUtils::getSnappingCandidates(layoutScene, queryRect, this);
 
     if (m_resizeHandle & Right) {
-      for (QGraphicsItem* item : candidates) {
+      for (QGraphicsItem* item : std::as_const(candidates)) {
         QRectF other = item->mapRectToScene(item->boundingRect());
 
         if (SnappingUtils::rangesOverlap(currentY, rect().height(), other.top(), other.height())) {
@@ -282,7 +282,7 @@ void ResizableAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     }
 
     if (m_resizeHandle & Bottom) {
-      for (QGraphicsItem* item : candidates) {
+      for (QGraphicsItem* item : std::as_const(candidates)) {
         QRectF other = item->mapRectToScene(item->boundingRect());
 
         if (SnappingUtils::rangesOverlap(currentX, rect().width(), other.left(), other.width())) {

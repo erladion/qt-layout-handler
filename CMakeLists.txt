@@ -63,27 +63,14 @@ endif()
 
 set(PROJECT_SOURCES
         main.cpp
-)
-
-if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
-    qt_add_executable(layouteditor
-        MANUAL_FINALIZATION
-        ${PROJECT_SOURCES}
         resources.qrc
-        mainwindow.h
-        mainwindow.cpp
-        layoutscene.h
-        layoutscene.cpp
-        resizableappitem.h
-        resizableappitem.cpp
-        zoneitem.h
-        zoneitem.cpp
-        rulerbar.h
-        rulerbar.cpp
-        snappingitemgroup.h
-        snappingitemgroup.cpp
-        guidelineitem.h
-        guidelineitem.cpp
+        mainwindow.h mainwindow.cpp
+        layoutscene.h layoutscene.cpp
+        resizableappitem.h resizableappitem.cpp
+        zoneitem.h zoneitem.cpp
+        rulerbar.h rulerbar.cpp
+        snappingitemgroup.h snappingitemgroup.cpp
+        guidelineitem.h guidelineitem.cpp
         snappingutils.h snappingutils.cpp
         layoutserializer.h layoutserializer.cpp
         propertiesdialog.h propertiesdialog.cpp
@@ -97,6 +84,13 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         mirroredappitem.h mirroredappitem.cpp
         drawingmanager.h drawingmanager.cpp
         crophandleitem.h crophandleitem.cpp
+)
+
+if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
+    qt_add_executable(layouteditor
+        MANUAL_FINALIZATION
+        ${PROJECT_SOURCES}
+        draghandlewidget.h draghandlewidget.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET layouteditor APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

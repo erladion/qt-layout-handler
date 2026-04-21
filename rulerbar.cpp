@@ -104,6 +104,8 @@ void RulerBar::mouseReleaseEvent(QMouseEvent* event) {
       GuideLineItem* guide = new GuideLineItem(guideOri, pos);
       if (m_pView->scene()) {
         m_pView->scene()->addItem(guide);
+      } else {
+        delete guide;
       }
     }
 

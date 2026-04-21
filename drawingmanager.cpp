@@ -41,6 +41,12 @@ void DrawingManager::clearDrawings() {
     delete item;
   }
   m_drawnItems.clear();
+
+  for (QGraphicsItem* item : std::as_const(m_undoneItems)) {
+    delete item;  // These are already removed from the scene, so just delete
+  }
+  m_undoneItems.clear();
+
   m_currentPath.clear();
   if (m_drawingLayer) {
     m_drawingLayer->setPath(m_currentPath);
@@ -113,9 +119,59 @@ bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
       }
       return true;
     } else if (event->type() == QEvent::MouseButtonRelease && mouseEvent->button() == Qt::LeftButton) {
-      m_activeDrawItem = nullptr;
+      if (m_activeDrawItem) {
+        m_activeDrawItem = nullptr;
+
+        // --- NEW: A new action invalidates the redo history ---
+        for (QGraphicsItem* item : std::as_const(m_undoneItems)) {
+          delete item;
+        }
+        m_undoneItems.clear();
+        // ------------------------------------------------------
+      }
       return true;
     }
   }
   return false;
+}
+
+// Add the implementation for Undo/Redo anywhere in the file
+void DrawingManager::undo() {
+  if (m_drawnItems.isEmpty())
+    return;
+
+  // Pop the last drawn item off the active list
+  QGraphicsItem* item = m_drawnItems.takeLast();
+
+  // Remove it from the scene so it disappears, but DO NOT delete it
+  if (m_pScene && item->scene() == m_pScene) {
+    m_pScene->removeItem(item);
+  }
+
+  // Push it onto the redo stack
+  m_undoneItems.append(item);
+}
+
+void DrawingManager::redo() {
+  if (m_undoneItems.isEmpty())
+    return;
+
+  // Pop the last undone item off the redo stack
+  QGraphicsItem* item = m_undoneItems.takeLast();
+
+  // Add it back to the scene so it reappears
+  if (m_pScene) {
+    m_pScene->addItem(item);
+  }
+
+  // Push it back onto the active list
+  m_drawnItems.append(item);
+}
+
+bool DrawingManager::canUndo() const {
+  return !m_drawnItems.isEmpty();
+}
+
+bool DrawingManager::canRedo() const {
+  return !m_undoneItems.isEmpty();
 }

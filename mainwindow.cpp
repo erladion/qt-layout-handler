@@ -46,6 +46,8 @@
 
 #include <cmath>
 
+#include "draghandlewidget.h"
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), m_pScene(nullptr), m_pToolbar(nullptr), m_pTopBarSpin(nullptr), m_pBotBarSpin(nullptr), m_isModified(false) {
   resize(1400, 900);
@@ -826,10 +828,13 @@ void MainWindow::createFloatingToolbar() {
 
   // --- THE DRAG HANDLE ---
   // Using a horizontal dots character for a clean, modern handle
-  QLabel* dragHandle = new QLabel("⋮⋮⋮⋮⋮⋮", m_floatingToolbar);
-  dragHandle->setAlignment(Qt::AlignCenter);
-  dragHandle->setCursor(Qt::SizeAllCursor);
-  dragHandle->setStyleSheet("color: #888; font-weight: bold; letter-spacing: 2px; padding-bottom: 2px;");
+  // QLabel* dragHandle = new QLabel("⋮⋮⋮⋮⋮⋮", m_floatingToolbar);
+  // dragHandle->setAlignment(Qt::AlignCenter);
+  // dragHandle->setCursor(Qt::SizeAllCursor);
+  // dragHandle->setStyleSheet("color: #888; font-weight: bold; letter-spacing: 2px; padding-bottom: 2px;");
+  // mainLayout->addWidget(dragHandle);
+
+  DragHandleWidget* dragHandle = new DragHandleWidget(m_floatingToolbar);
   mainLayout->addWidget(dragHandle);
 
   // Recreate your original buttons
@@ -932,8 +937,9 @@ void MainWindow::createFloatingToolbar() {
   m_drawSettingsWidget->setStyleSheet("background-color: rgba(30, 30, 30, 220); border-radius: 8px; color: white;");
   m_drawSettingsWidget->hide();
 
-  QHBoxLayout* drawLayout = new QHBoxLayout(m_drawSettingsWidget);
+  QVBoxLayout* drawLayout = new QVBoxLayout(m_drawSettingsWidget);
   drawLayout->setContentsMargins(10, 5, 10, 5);
+  drawLayout->setSpacing(8);
 
   QComboBox* shapeCombo = new QComboBox();
   shapeCombo->setStyleSheet("background-color: #333; color: white; border: none; padding: 2px;");
@@ -950,9 +956,50 @@ void MainWindow::createFloatingToolbar() {
   drawColorBtn->setFixedSize(20, 20);
   drawColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(m_drawColor.name()));
 
-  drawLayout->addWidget(shapeCombo);
-  drawLayout->addWidget(drawSlider);
-  drawLayout->addWidget(drawColorBtn);
+  QPushButton* undoBtn = new QPushButton(QIcon(":/icons/undo"), "");
+  QPushButton* redoBtn = new QPushButton(QIcon(":/icons/redo"), "");
+
+  undoBtn->setFixedSize(24, 24);
+  redoBtn->setFixedSize(24, 24);
+
+  QString btnStyle =
+      "QPushButton { background-color: #444; border: 1px solid #666; border-radius: 3px; padding: 2px 6px; font-size: 11px; }"
+      "QPushButton:hover { background-color: #555; }"
+      "QPushButton:pressed { background-color: #333; }";
+
+  undoBtn->setStyleSheet(btnStyle);
+  redoBtn->setStyleSheet(btnStyle);
+
+  QHBoxLayout* drawSettingsLayout = new QHBoxLayout();
+  drawSettingsLayout->addWidget(shapeCombo);
+  drawSettingsLayout->addWidget(drawSlider);
+  drawSettingsLayout->addWidget(drawColorBtn);
+
+  // QFrame* vLine = new QFrame();
+  // vLine->setFrameShape(QFrame::VLine);
+  // vLine->setFrameShadow(QFrame::Sunken);
+  // vLine->setStyleSheet("color: #666;");
+  // drawLayout->addWidget(vLine);
+
+  QHBoxLayout* undoRedoLayout = new QHBoxLayout();
+  undoRedoLayout->addWidget(undoBtn);
+  undoRedoLayout->addWidget(redoBtn);
+  undoRedoLayout->addStretch();
+
+  drawLayout->addLayout(drawSettingsLayout);
+  drawLayout->addLayout(undoRedoLayout);
+
+  connect(undoBtn, &QPushButton::clicked, this, [this]() {
+    if (m_pDrawingManager) {
+      m_pDrawingManager->undo();
+    }
+  });
+
+  connect(redoBtn, &QPushButton::clicked, this, [this]() {
+    if (m_pDrawingManager) {
+      m_pDrawingManager->redo();
+    }
+  });
 
   // Draw Connections
   connect(shapeCombo, &QComboBox::currentIndexChanged, this, [this, shapeCombo](int index) {
@@ -1142,8 +1189,9 @@ void MainWindow::createToolbar() {
 
       QAction* screenAct = projMenu->addAction(screenName);
       connect(screenAct, &QAction::triggered, this, [this, screen]() {
-        if (!m_pScene)
+        if (!m_pScene) {
           return;
+        }
         if (!m_pProjector) {
           m_pProjector = new ProjectorWindow(m_pScene);
         }
@@ -1163,8 +1211,9 @@ void MainWindow::createToolbar() {
     // Keep a fallback windowed mode for easy local testing
     QAction* windowedAct = projMenu->addAction("Windowed Mode (Local Test)");
     connect(windowedAct, &QAction::triggered, this, [this]() {
-      if (!m_pScene)
+      if (!m_pScene) {
         return;
+      }
       if (!m_pProjector) {
         m_pProjector = new ProjectorWindow(m_pScene);
       }

@@ -414,3 +414,35 @@ void MirroredAppItem::updateStatusText() {
   m_pStatusText->setPlainText(status);
   m_pStatusText->setPos(5, rect().height() - m_pStatusText->boundingRect().height());
 }
+
+void MirroredAppItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event) {
+  if (m_isCropping) {
+    // Force a standard cursor so it doesn't show the resize arrows
+    setCursor(Qt::ArrowCursor);
+    return;
+  }
+  ResizableAppItem::hoverMoveEvent(event);
+}
+
+void MirroredAppItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+  if (m_isCropping) {
+    // Accept the event so the click doesn't fall through to the scene
+    event->accept();
+    return;
+  }
+  ResizableAppItem::mousePressEvent(event);
+}
+
+void MirroredAppItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
+  if (m_isCropping) {
+    return;  // Block moving and resizing
+  }
+  ResizableAppItem::mouseMoveEvent(event);
+}
+
+void MirroredAppItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
+  if (m_isCropping) {
+    return;
+  }
+  ResizableAppItem::mouseReleaseEvent(event);
+}

@@ -7,6 +7,7 @@
 #include <QGraphicsView>
 #include <QLabel>
 #include <QMainWindow>
+#include <QPointer>
 #include <QSlider>
 
 #include "snappingitemgroup.h"
@@ -133,7 +134,7 @@ private:
 
   bool m_wasMaximized = false;
   WindowSelector* m_selector = nullptr;
-  ProjectorWindow* m_pProjector = nullptr;
+  QPointer<ProjectorWindow> m_pProjector = nullptr;
 
   bool m_isSelectingWindow = false;
 

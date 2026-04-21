@@ -40,6 +40,11 @@ protected:
   void setupCustomActions();
   void updateStatusText() override;
 
+  void hoverMoveEvent(QGraphicsSceneHoverEvent* event) override;
+  void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
+  void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
+  void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
+
 private:
   void rebuildPipeline();
   QString generatePipelineString();

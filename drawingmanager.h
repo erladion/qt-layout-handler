@@ -29,6 +29,11 @@ public:
 
   void clearDrawings();
 
+  void undo();
+  void redo();
+  bool canUndo() const;
+  bool canRedo() const;
+
 private:
   QGraphicsScene* m_pScene;
   QGraphicsPathItem* m_drawingLayer;
@@ -41,7 +46,9 @@ private:
   int m_drawSize;
 
   QPointF m_drawStartPos;
+
   QList<QGraphicsItem*> m_drawnItems;
+  QList<QGraphicsItem*> m_undoneItems;
 };
 
 #endif  // DRAWINGMANAGER_H

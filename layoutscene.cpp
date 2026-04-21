@@ -38,7 +38,10 @@ public:
 
   void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override {
     Q_UNUSED(option);
-    Q_UNUSED(widget);
+
+    if (widget == nullptr) {
+      return;  // Skip drawing the background, grid, and bars entirely!
+    }
 
     LayoutScene* layoutScene = dynamic_cast<LayoutScene*>(scene());
     if (!layoutScene) {
