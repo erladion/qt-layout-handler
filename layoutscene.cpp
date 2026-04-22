@@ -407,12 +407,21 @@ void LayoutScene::setLaserActive(bool active) {
 }
 
 void LayoutScene::updateLaserPosition(const QPointF& pos) {
-  if (!m_laserActive)
+  if (!m_laserActive) {
     return;
+  }
+
+  QRectF dirtyRect(m_laserPos, QSizeF(0, 0));
+  dirtyRect.adjust(-20, -20, 20, 20);
+
   if (m_laserTrail.isEmpty() || QLineF(m_laserPos, pos).length() > 2.0) {
     m_laserTrail.prepend({m_laserPos, 0});
-    if (m_laserTrail.size() > 15)
+
+    dirtyRect = dirtyRect.united(QRectF(m_laserPos, QSizeF(1, 1)).adjusted(-10, -10, 10, 10));
+
+    if (m_laserTrail.size() > 15) {
       m_laserTrail.removeLast();
+    }
   }
   m_laserPos = pos;
   invalidate(sceneRect(), QGraphicsScene::ForegroundLayer);
@@ -449,12 +458,20 @@ void LayoutScene::alignSelection(Alignment alignment) {
 }
 
 void LayoutScene::fadeLaserTrail() {
-  if (!m_laserActive && m_laserTrail.isEmpty())
+  if (!m_laserActive && m_laserTrail.isEmpty()) {
     return;
+  }
 
   bool needsUpdate = false;
+
+  QRectF dirtyRect(m_laserPos, QSizeF(0, 0));
+  dirtyRect.adjust(-20, -20, 20, 20);
+
   for (int i = 0; i < m_laserTrail.size(); ++i) {
     m_laserTrail[i].age++;
+
+    dirtyRect = dirtyRect.united(QRectF(m_laserTrail[i].pos, QSizeF(1, 1)).adjusted(-10, -10, 10, 10));
+
     if (m_laserTrail[i].age > 15) {
       m_laserTrail.removeAt(i);
       i--;
@@ -463,7 +480,6 @@ void LayoutScene::fadeLaserTrail() {
     }
   }
   if (needsUpdate || m_laserActive) {
-    // Fast, partial screen invalidation
-    invalidate(sceneRect(), QGraphicsScene::ForegroundLayer);
+    invalidate(dirtyRect, QGraphicsScene::ForegroundLayer);
   }
 }
