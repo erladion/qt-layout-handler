@@ -61,6 +61,8 @@ private:
 
   // GStreamer Pipeline
   GstElement* m_pipeline = nullptr;
+  guint m_busWatchId = 0;
+
   bool m_isRecording = false;
   QString m_recordFilename;
 
@@ -76,6 +78,7 @@ private:
   QImage m_currentFrame;
   QMutex m_frameMutex;
   bool m_frameReady = false;
+  QImage m_bufferImage;
 
   QString m_captureSource;
 

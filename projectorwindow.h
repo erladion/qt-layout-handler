@@ -15,7 +15,6 @@ protected:
 
 private:
   QGraphicsScene* m_pScene;
-  QTimer* m_pRenderTimer;
 };
 
 #endif  // PROJECTORWINDOW_H

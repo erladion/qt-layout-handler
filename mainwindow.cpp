@@ -1194,6 +1194,7 @@ void MainWindow::createToolbar() {
         }
         if (!m_pProjector) {
           m_pProjector = new ProjectorWindow(m_pScene);
+          m_pProjector->setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
         }
 
         // CRITICAL: Pull it out of fullscreen first before moving it to a new monitor!

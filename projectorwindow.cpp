@@ -6,14 +6,10 @@ ProjectorWindow::ProjectorWindow(QGraphicsScene* scene, QWidget* parent) : QWidg
   setAttribute(Qt::WA_DeleteOnClose);
   setAttribute(Qt::WA_TranslucentBackground);
 
-  // QPalette pal = palette();
-  // pal.setColor(QPalette::Window, QColor(0x1e1e1e));  // Black/Dark background
-  // setAutoFillBackground(true);
-  // setPalette(pal);
-
-  m_pRenderTimer = new QTimer(this);
-  connect(m_pRenderTimer, &QTimer::timeout, this, [this]() { this->update(); });
-  m_pRenderTimer->start(33);  // 30 FPS Render Loop
+  connect(m_pScene, &QGraphicsScene::changed, this, [this](const QList<QRectF>& region) {
+    // Only request a repaint when an item moves, video updates, or laser is drawn
+    this->update();
+  });
 }
 
 void ProjectorWindow::paintEvent(QPaintEvent* event) {
@@ -26,9 +22,6 @@ void ProjectorWindow::paintEvent(QPaintEvent* event) {
   painter.setCompositionMode(QPainter::CompositionMode_Source);
   painter.fillRect(rect(), Qt::transparent);
   painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-
-  // Wipe background to prevent ghosting on different aspect ratios
-  // painter.fillRect(this->rect(), Qt::black);
 
   painter.setRenderHint(QPainter::Antialiasing, false);
   painter.setRenderHint(QPainter::SmoothPixmapTransform, false);

@@ -38,6 +38,9 @@ void DrawingManager::clearDrawings() {
     if (m_pScene && item->scene() == m_pScene) {
       m_pScene->removeItem(item);
     }
+    if (item == m_activeDrawItem) {
+      m_activeDrawItem = nullptr;
+    }
     delete item;
   }
   m_drawnItems.clear();
