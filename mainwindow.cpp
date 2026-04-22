@@ -694,7 +694,8 @@ void MainWindow::setWallpaper() {
     return;
   }
 
-  QString fileName = QFileDialog::getOpenFileName(this, "Select Wallpaper", "", "Images (*.png *.jpg *.jpeg *.bmp)");
+  QString fileName =
+      QFileDialog::getOpenFileName(this, "Select Wallpaper", "", "Images (*.png *.jpg *.jpeg *.bmp)", nullptr, QFileDialog::DontUseNativeDialog);
   if (fileName.isEmpty()) {
     return;
   }
@@ -737,7 +738,7 @@ bool MainWindow::saveLayout() {
   if (!m_pScene) {
     return false;
   }
-  QString fileName = QFileDialog::getSaveFileName(this, "Save Layout", "", "XML Files (*.xml)");
+  QString fileName = QFileDialog::getSaveFileName(this, "Save Layout", "", "XML Files (*.xml)", nullptr, QFileDialog::DontUseNativeDialog);
   if (fileName.isEmpty()) {
     return false;
   }
@@ -757,7 +758,7 @@ void MainWindow::loadLayout() {
     return;
   }
 
-  QString fileName = QFileDialog::getOpenFileName(this, "Load Layout", "", "XML Files (*.xml)");
+  QString fileName = QFileDialog::getOpenFileName(this, "Load Layout", "", "XML Files (*.xml)", nullptr, QFileDialog::DontUseNativeDialog);
   if (fileName.isEmpty()) {
     return;
   }
