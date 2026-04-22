@@ -89,7 +89,7 @@ void WindowSelector::captureWindowUnderCursor() {
 
     // Build the Linux-specific GStreamer capture element
     // (use-damage=false prevents X11 event loop starvation)
-    QString captureSource = QString("ximagesrc xid=%1 use-damage=false").arg(targetWindow);
+    QString captureSource = QString("ximagesrc xid=%1").arg(targetWindow);
     emit windowSelectedForGStreamer(captureSource);
   }
 
