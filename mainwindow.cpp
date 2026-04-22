@@ -129,6 +129,10 @@ MainWindow::~MainWindow() {
 
 void MainWindow::closeEvent(QCloseEvent* event) {
   if (maybeSave()) {
+    if (m_pProjector) {
+      m_pProjector->close();
+    }
+
     event->accept();
   } else {
     event->ignore();
