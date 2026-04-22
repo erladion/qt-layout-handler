@@ -2,7 +2,7 @@
 #define PROJECTORWINDOW_H
 
 #include <QGraphicsScene>
-#include <QTimer>
+#include <QPointer>
 #include <QWidget>
 
 class ProjectorWindow : public QWidget {
@@ -14,7 +14,7 @@ protected:
   void paintEvent(QPaintEvent* event) override;
 
 private:
-  QGraphicsScene* m_pScene;
+  QPointer<QGraphicsScene> m_pScene;
 };
 
 #endif  // PROJECTORWINDOW_H

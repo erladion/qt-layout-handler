@@ -300,6 +300,10 @@ void MainWindow::closeLayout() {
     return;
   }
 
+  if (m_pProjector) {
+    m_pProjector->close();
+  }
+
   if (!m_pScene) {
     return;
   }

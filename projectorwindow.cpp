@@ -18,7 +18,12 @@ void ProjectorWindow::paintEvent(QPaintEvent* event) {
     return;
   }
 
-  QPainter painter(this);
+  QPainter painter;
+  // Check if the window is in a valid state to be painted
+  if (!painter.begin(this)) {
+    return;  // The window is likely shutting down or minimized. Bail out safely.
+  }
+
   painter.setCompositionMode(QPainter::CompositionMode_Source);
   painter.fillRect(rect(), Qt::transparent);
   painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
@@ -27,4 +32,6 @@ void ProjectorWindow::paintEvent(QPaintEvent* event) {
   painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
 
   m_pScene->render(&painter, rect(), m_pScene->sceneRect(), Qt::KeepAspectRatio);
+
+  painter.end();
 }
