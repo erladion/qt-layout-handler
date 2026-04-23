@@ -99,6 +99,8 @@ bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
         item->setPen(drawPen);
         item->setZValue(900);
 
+        item->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable);
+
         m_pScene->addItem(item);
         m_activeDrawItem = item;
       }

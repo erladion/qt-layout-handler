@@ -499,28 +499,6 @@ void MainWindow::toggleProperties() {
   }
 }
 
-void MainWindow::onSelectionChanged() {
-  if (!m_pProperties->isVisible()) {
-    return;
-  }
-
-  if (!m_pScene) {
-    return;
-  }
-
-  QList<QGraphicsItem*> sel = m_pScene->selectedItems();
-  if (sel.isEmpty()) {
-    QTimer::singleShot(Constants::SelectionDebounceDelay, this, [this]() {
-      if (m_pScene && m_pScene->selectedItems().isEmpty()) {
-        m_pProperties->setItem(nullptr);
-      }
-    });
-  } else {
-    m_pProperties->setItem(sel.first());
-    m_pProperties->raise();
-  }
-}
-
 void MainWindow::onSceneChanged(const QList<QRectF>& region) {
   Q_UNUSED(region);
   if (m_pScene) {
@@ -1388,5 +1366,147 @@ void MainWindow::createToolbar() {
 
   m_pSectionView->addWidget(barsContainer, 1, 0);
 
+  m_pSectionFormat = ribbon->addSection("Format", QIcon(":/icons/draw.svg"));
+
+  QWidget* formatContainer = new QWidget();
+  QGridLayout* formatGrid = new QGridLayout(formatContainer);
+  formatGrid->setContentsMargins(0, 0, 0, 0);
+  formatGrid->setSpacing(5);
+
+  m_pFormatLineWidthSpin = new QSpinBox();
+  m_pFormatLineWidthSpin->setRange(1, 100);
+  m_pFormatLineWidthSpin->setSuffix(" px");
+  m_pFormatLineWidthSpin->setStyleSheet("background-color: white; color: black;");  // Optional basic styling
+
+  formatGrid->addWidget(new QLabel("Line:"), 0, 0);
+  formatGrid->addWidget(m_pFormatLineWidthSpin, 0, 1);
+
+  m_pFormatLineColorBtn = new QPushButton();
+  m_pFormatLineColorBtn->setFixedSize(20, 20);
+  m_pFormatLineColorBtn->setCursor(Qt::PointingHandCursor);
+  formatGrid->addWidget(m_pFormatLineColorBtn, 0, 2);
+
+  // Fill container (hidden for paths)
+  m_pFormatFillContainer = new QWidget();
+  QHBoxLayout* fillLayout = new QHBoxLayout(m_pFormatFillContainer);
+  fillLayout->setContentsMargins(0, 0, 0, 0);
+  fillLayout->setSpacing(5);
+  fillLayout->addWidget(new QLabel("Fill:"));
+  m_pFormatFillColorBtn = new QPushButton();
+  m_pFormatFillColorBtn->setFixedSize(20, 20);
+  m_pFormatFillColorBtn->setCursor(Qt::PointingHandCursor);
+  fillLayout->addWidget(m_pFormatFillColorBtn);
+
+  formatGrid->addWidget(m_pFormatFillContainer, 1, 0, 1, 3);
+
+  m_pSectionFormat->addWidget(formatContainer, 0, 0);
+  m_pSectionFormat->setVisible(false);  // <--- Hidden by default
+
+  connect(m_pFormatLineWidthSpin, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::onFormatLineWidthChanged);
+  connect(m_pFormatLineColorBtn, &QPushButton::clicked, this, &MainWindow::onFormatLineColorClicked);
+  connect(m_pFormatFillColorBtn, &QPushButton::clicked, this, &MainWindow::onFormatFillColorClicked);
+
   ribbon->addSpacer();
+}
+
+void MainWindow::onSelectionChanged() {
+  if (!m_pScene)
+    return;
+
+  QList<QGraphicsItem*> sel = m_pScene->selectedItems();
+
+  // --- Handle Contextual Ribbon Visibility ---
+  bool showFormat = false;
+  if (!sel.isEmpty()) {
+    QGraphicsItem* item = sel.first();
+    // Ensure it's a drawn shape, NOT a custom App/Zone item
+    if (item->type() == QGraphicsPathItem::Type || item->type() == QGraphicsRectItem::Type || item->type() == QGraphicsEllipseItem::Type) {
+      showFormat = true;
+      auto shapeItem = static_cast<QAbstractGraphicsShapeItem*>(item);
+
+      // Populate the Ribbon fields with current values
+      m_pFormatLineWidthSpin->blockSignals(true);
+      m_pFormatLineWidthSpin->setValue(shapeItem->pen().width());
+      m_pFormatLineWidthSpin->blockSignals(false);
+
+      updateFormatButtonColor(m_pFormatLineColorBtn, shapeItem->pen().color());
+
+      // Hide Fill option if it's a Freehand line
+      if (item->type() == QGraphicsPathItem::Type) {
+        m_pFormatFillContainer->hide();
+      } else {
+        m_pFormatFillContainer->show();
+        updateFormatButtonColor(m_pFormatFillColorBtn, shapeItem->brush().color());
+      }
+    }
+  }
+
+  // Show or Hide the section
+  m_pSectionFormat->setVisible(showFormat);
+
+  // --- Existing Properties Dialog Logic ---
+  if (!m_pProperties->isVisible())
+    return;
+
+  if (sel.isEmpty()) {
+    QTimer::singleShot(Constants::SelectionDebounceDelay, this, [this]() {
+      if (m_pScene && m_pScene->selectedItems().isEmpty()) {
+        m_pProperties->setItem(nullptr);
+      }
+    });
+  } else {
+    // Only pass it to properties if it is not a shape (or pass it anyway if you want Geometry data)
+    if (!showFormat) {
+      m_pProperties->setItem(sel.first());
+      m_pProperties->raise();
+    } else {
+      m_pProperties->setItem(nullptr);  // Prevent modifying shape geometry in properties if desired
+    }
+  }
+}
+
+void MainWindow::updateFormatButtonColor(QPushButton* btn, const QColor& color) {
+  QString colorName = (color.isValid() && color.alpha() > 0) ? color.name() : "transparent";
+  btn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(colorName));
+}
+
+void MainWindow::onFormatLineWidthChanged(int val) {
+  if (!m_pScene || m_pScene->selectedItems().isEmpty())
+    return;
+  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(m_pScene->selectedItems().first());
+  if (shape) {
+    QPen pen = shape->pen();
+    pen.setWidth(val);
+    shape->setPen(pen);
+  }
+}
+
+void MainWindow::onFormatLineColorClicked() {
+  if (!m_pScene || m_pScene->selectedItems().isEmpty())
+    return;
+  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(m_pScene->selectedItems().first());
+  if (shape) {
+    QColor newColor =
+        QColorDialog::getColor(shape->pen().color(), this, "Line Color", QColorDialog::ShowAlphaChannel | QColorDialog::DontUseNativeDialog);
+    if (newColor.isValid()) {
+      QPen pen = shape->pen();
+      pen.setColor(newColor);
+      shape->setPen(pen);
+      updateFormatButtonColor(m_pFormatLineColorBtn, newColor);
+    }
+  }
+}
+
+void MainWindow::onFormatFillColorClicked() {
+  if (!m_pScene || m_pScene->selectedItems().isEmpty())
+    return;
+  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(m_pScene->selectedItems().first());
+  if (shape) {
+    QColor newColor =
+        QColorDialog::getColor(shape->brush().color(), this, "Fill Color", QColorDialog::ShowAlphaChannel | QColorDialog::DontUseNativeDialog);
+    if (newColor.isValid()) {
+      shape->setBrush(QBrush(newColor));
+      updateFormatButtonColor(m_pFormatFillColorBtn, newColor);
+    }
+  }
 }

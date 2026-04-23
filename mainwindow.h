@@ -73,6 +73,11 @@ private slots:
 
   void openSettings();
 
+  void onFormatLineWidthChanged(int val);
+  void onFormatLineColorClicked();
+  void onFormatFillColorClicked();
+  void updateFormatButtonColor(QPushButton* btn, const QColor& color);
+
 private:
   void createToolbar();
   void createMenuBar();
@@ -85,6 +90,8 @@ private:
   void connectSceneSignals();
 
   QString getTemplateXml(const QString& name);
+
+  void updatePopoutPositions();
 
   // Define our three operating modes
   enum class PresenterMode { EditLayout, Draw, Laser };
@@ -149,7 +156,11 @@ private:
 
   DrawingManager* m_pDrawingManager = nullptr;
 
-  void updatePopoutPositions();
+  RibbonSection* m_pSectionFormat;
+  QSpinBox* m_pFormatLineWidthSpin;
+  QPushButton* m_pFormatLineColorBtn;
+  QPushButton* m_pFormatFillColorBtn;
+  QWidget* m_pFormatFillContainer;
 };
 
 #endif  // MAINWINDOW_H
