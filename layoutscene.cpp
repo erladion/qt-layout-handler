@@ -413,20 +413,20 @@ void LayoutScene::updateLaserPosition(const QPointF& pos) {
     return;
   }
 
-  QRectF dirtyRect(m_laserPos, QSizeF(0, 0));
-  dirtyRect.adjust(-20, -20, 20, 20);
+  // Repaint only the region spanning the old and new head positions (plus the
+  // glow radius and line half-width), instead of invalidating the whole scene.
+  const qreal margin = m_laserSize + 12.0;
+  QRectF dirtyRect = QRectF(m_laserPos, pos).normalized().adjusted(-margin, -margin, margin, margin);
 
   if (m_laserTrail.isEmpty() || QLineF(m_laserPos, pos).length() > 2.0) {
     m_laserTrail.prepend({m_laserPos, 0});
-
-    dirtyRect = dirtyRect.united(QRectF(m_laserPos, QSizeF(1, 1)).adjusted(-10, -10, 10, 10));
 
     if (m_laserTrail.size() > 15) {
       m_laserTrail.removeLast();
     }
   }
   m_laserPos = pos;
-  invalidate(sceneRect(), QGraphicsScene::ForegroundLayer);
+  invalidate(dirtyRect, QGraphicsScene::ForegroundLayer);
 }
 
 void LayoutScene::setLaserColor(const QColor& color) {
