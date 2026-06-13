@@ -33,9 +33,12 @@ void WindowSelector::captureWindowUnderCursor() {
       bestHwnd = GetAncestor(targetHwnd, GA_ROOT);
     }
 
-    // We only grab the title now to print it to your debug console
-    WCHAR windowTitle[256];
-    GetWindowTextW(bestHwnd, windowTitle, sizeof(windowTitle));
+    // We only grab the title now to print it to your debug console.
+    // GetWindowTextW's count is in characters, not bytes — using sizeof here
+    // would claim a 512-char buffer and overflow the 256-WCHAR array.
+    constexpr int titleMaxLen = 256;
+    WCHAR windowTitle[titleMaxLen];
+    GetWindowTextW(bestHwnd, windowTitle, titleMaxLen);
     QString titleStr = QString::fromWCharArray(windowTitle);
     titleStr.replace("\"", "");
     qDebug() << "Captured Windows HWND:" << bestHwnd << "Title:" << windowTitle << titleStr;
