@@ -102,6 +102,7 @@ private:
 
   QHBoxLayout* m_pLayout;
   QList<RibbonSection*> m_sections;
+  int m_lastVisibleCount = -1;
 };
 
 #endif  // OFFICETOOLBAR_H

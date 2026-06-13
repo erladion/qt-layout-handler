@@ -1376,10 +1376,10 @@ void MainWindow::createToolbar() {
   barsLayout->setContentsMargins(0, 0, 0, 0);
   barsLayout->setSpacing(5);
 
-  QHBoxLayout* topLayout = new QHBoxLayout(barsContainer);
+  QHBoxLayout* topLayout = new QHBoxLayout();
   topLayout->setContentsMargins(0, 0, 0, 0);
 
-  QHBoxLayout* bottomLayout = new QHBoxLayout(barsContainer);
+  QHBoxLayout* bottomLayout = new QHBoxLayout();
   bottomLayout->setContentsMargins(0, 0, 0, 0);
 
   topLayout->addWidget(new QLabel("Top:"));
@@ -1406,7 +1406,7 @@ void MainWindow::createToolbar() {
   m_pFormatLineWidthSpin->setStyleSheet(spinStyle);
 
   QHBoxLayout* sizeLayout = new QHBoxLayout();
-  QLabel* sizeLabel = new QLabel("Size:", this);
+  QLabel* sizeLabel = new QLabel("Size:");
   sizeLabel->setStyleSheet("QLabel {color: black;}");
   sizeLayout->addWidget(sizeLabel);
   sizeLayout->addWidget(m_pFormatLineWidthSpin);

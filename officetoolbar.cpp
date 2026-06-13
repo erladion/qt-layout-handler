@@ -344,10 +344,21 @@ void OfficeToolbar::paintEvent(QPaintEvent* event) {
 }
 
 bool OfficeToolbar::event(QEvent* e) {
-  // Whenever a child gets hidden/shown, Qt sends a LayoutRequest to the parent.
-  // We catch it here to re-evaluate our ribbon collapsing logic.
+  // A section being shown/hidden sends a LayoutRequest, so re-run the collapse
+  // logic — but only when the visible set actually changed. Reacting to every
+  // LayoutRequest would loop, since layoutSections() -> setMode() ->
+  // updateGeometry() posts another LayoutRequest.
   if (e->type() == QEvent::LayoutRequest) {
-    QTimer::singleShot(0, this, [this]() { layoutSections(); });
+    int visibleCount = 0;
+    for (auto sec : std::as_const(m_sections)) {
+      if (!sec->isHidden()) {
+        visibleCount++;
+      }
+    }
+    if (visibleCount != m_lastVisibleCount) {
+      m_lastVisibleCount = visibleCount;
+      QTimer::singleShot(0, this, [this]() { layoutSections(); });
+    }
   }
   return QWidget::event(e);
 }
