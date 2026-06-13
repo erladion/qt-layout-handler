@@ -89,6 +89,27 @@ MirroredAppItem::~MirroredAppItem() {
   }
 }
 
+// Pick the best available H.264 encoder so recording works on any GPU
+// (NVIDIA / VA-API / software) instead of assuming NVENC is installed.
+static QString selectH264Encoder() {
+  struct EncoderChoice {
+    const char* factory;
+    const char* pipeline;
+  };
+  static const EncoderChoice choices[] = {
+      {"nvh264enc", "nvh264enc zerolatency=true"},
+      {"vah264enc", "vah264enc"},
+      {"x264enc", "x264enc tune=zerolatency speed-preset=ultrafast"},
+  };
+  for (const auto& choice : choices) {
+    if (GstElementFactory* factory = gst_element_factory_find(choice.factory)) {
+      gst_object_unref(factory);
+      return QString::fromLatin1(choice.pipeline);
+    }
+  }
+  return QStringLiteral("x264enc tune=zerolatency speed-preset=ultrafast");
+}
+
 QString MirroredAppItem::generatePipelineString() {
   // THE FIX: Added videoconvert and videorate right after the source
   QString baseStr =
@@ -103,11 +124,12 @@ QString MirroredAppItem::generatePipelineString() {
   if (!m_isRecording) {
     return baseStr + "videoconvert ! video/x-raw,format=BGRx ! appsink name=mysink";
   } else {
+    const QString encoder = selectH264Encoder();
     return baseStr + QString(
                          "tee name=t ! "
                          "queue ! videoconvert ! video/x-raw,format=BGRx ! appsink name=mysink "
-                         "t. ! queue ! videoconvert ! nvh264enc zerolatency=true ! h264parse ! matroskamux ! filesink location=\"%1\"")
-                         .arg(m_recordFilename);
+                         "t. ! queue ! videoconvert ! %1 ! h264parse ! matroskamux ! filesink location=\"%2\"")
+                         .arg(encoder, m_recordFilename);
   }
 }
 
