@@ -31,6 +31,8 @@ public:
     setCacheMode(QGraphicsItem::NoCache);
   }
 
+  int type() const override { return Constants::Item::Workspace; }
+
   void setWallpaper(const QPixmap& pix) {
     m_wallpaper = pix;
     update();
