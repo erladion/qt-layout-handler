@@ -126,17 +126,13 @@ void ResizableAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
 
 QVariant ResizableAppItem::itemChange(GraphicsItemChange change, const QVariant& value) {
   if (change == ItemSelectedHasChanged) {
+    // Only change the highlight pen here. Z-order is owned by the explicit
+    // Bring-to-Front / Send-to-Back actions, so selection must not touch it.
     if (value.toBool()) {
       QColor selColor = m_locked ? QColor::fromRgba(Constants::Color::SelectionLocked) : QColor::fromRgba(Constants::Color::SelectionHighlight);
       setPen(QPen(selColor, 3));
-      if (!m_locked) {
-        setZValue(100);
-      }
     } else {
       setPen(QPen(Qt::black, 1));
-      if (!m_locked) {
-        setZValue(0);
-      }
     }
   }
 
