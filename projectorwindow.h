@@ -10,6 +10,8 @@ class ProjectorWindow : public QWidget {
 public:
   explicit ProjectorWindow(QGraphicsScene* scene, QWidget* parent = nullptr);
 
+  void setScene(QGraphicsScene* scene);
+
 protected:
   void paintEvent(QPaintEvent* event) override;
 

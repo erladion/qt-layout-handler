@@ -1,15 +1,28 @@
 #include "projectorwindow.h"
 #include <QPainter>
 
-ProjectorWindow::ProjectorWindow(QGraphicsScene* scene, QWidget* parent) : QWidget(parent), m_pScene(scene) {
+ProjectorWindow::ProjectorWindow(QGraphicsScene* scene, QWidget* parent) : QWidget(parent) {
   setWindowTitle("Layout Output");
   setAttribute(Qt::WA_DeleteOnClose);
   setAttribute(Qt::WA_TranslucentBackground);
 
-  connect(m_pScene, &QGraphicsScene::changed, this, [this](const QList<QRectF>& region) {
-    // Only request a repaint when an item moves, video updates, or laser is drawn
-    this->update();
-  });
+  setScene(scene);
+}
+
+void ProjectorWindow::setScene(QGraphicsScene* scene) {
+  if (m_pScene == scene) {
+    return;
+  }
+
+  if (m_pScene) {
+    m_pScene->disconnect(this);
+  }
+  m_pScene = scene;
+  if (m_pScene) {
+    // Only request a repaint when an item moves, video updates, or laser is drawn.
+    connect(m_pScene, &QGraphicsScene::changed, this, [this](const QList<QRectF>&) { update(); });
+  }
+  update();
 }
 
 void ProjectorWindow::paintEvent(QPaintEvent* event) {
