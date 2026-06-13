@@ -84,6 +84,8 @@ set(PROJECT_SOURCES
         drawingmanager.h drawingmanager.cpp
         crophandleitem.h crophandleitem.cpp
         draghandlewidget.h draghandlewidget.cpp
+        presentercontroller.h presentercontroller.cpp
+        formatpanel.h formatpanel.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

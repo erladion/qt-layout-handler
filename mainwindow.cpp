@@ -46,7 +46,8 @@
 
 #include <cmath>
 
-#include "draghandlewidget.h"
+#include "formatpanel.h"
+#include "presentercontroller.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), m_pScene(nullptr), m_pToolbar(nullptr), m_pTopBarSpin(nullptr), m_pBotBarSpin(nullptr), m_isModified(false) {
@@ -99,7 +100,7 @@ MainWindow::MainWindow(QWidget* parent)
 
   createToolbar();
   createMenuBar();
-  createFloatingToolbar();
+  m_pPresenter = new PresenterController(m_pView, this);
 
   updateInterfaceState();
   statusBar()->showMessage("No active layout. Create a New Layout (File -> New) to begin.", Constants::StatusMessageDuration);
@@ -268,13 +269,7 @@ void MainWindow::newLayout() {
     m_pScene->setTopBarHeight(SettingsDialog::getTopBarHeight());
     m_pScene->setBottomBarHeight(SettingsDialog::getBottomBarHeight());
 
-    if (m_pDrawingManager) {
-      delete m_pDrawingManager;
-    }
-    m_pDrawingManager = new DrawingManager(m_pScene, this);
-    m_pDrawingManager->setColor(m_drawColor);
-    m_pDrawingManager->setSize(m_drawSize);
-    m_pDrawingManager->setShape(static_cast<DrawingManager::Shape>(m_currentShape));
+    m_pPresenter->setScene(m_pScene);
 
     connectSceneSignals();
 
@@ -317,12 +312,8 @@ void MainWindow::closeLayout() {
 
   m_pView->setScene(m_pEmptyScene);
 
-  // Destroy the drawing manager while its scene is still alive so it removes
-  // and deletes its own items instead of being left with dangling pointers.
-  if (m_pDrawingManager) {
-    delete m_pDrawingManager;
-    m_pDrawingManager = nullptr;
-  }
+  // Tear the drawing manager down while its scene is still alive.
+  m_pPresenter->setScene(nullptr);
 
   m_pScene->deleteLater();
   m_pScene = nullptr;
@@ -378,54 +369,14 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     }
   }
 
-  // --- DRAG LOGIC FOR FLOATING TOOLBAR ---
-  if (watched == m_floatingToolbar) {
-    if (event->type() == QEvent::MouseButtonPress && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
-      m_isDraggingToolbar = true;
-      m_dragOffset = static_cast<QMouseEvent*>(event)->pos();
-      return true;
-    } else if (event->type() == QEvent::MouseMove && m_isDraggingToolbar) {
-      QPoint globalMousePos = static_cast<QMouseEvent*>(event)->globalPosition().toPoint();
-      QPoint parentPos = m_pView->viewport()->mapFromGlobal(globalMousePos);
-
-      // Calculate raw new position
-      QPoint newPos = parentPos - m_dragOffset;
-
-      // --- VIEWPORT BOUNDING MATH ---
-      // Calculate the maximum allowed X and Y coordinates
-      const int maxX = m_pView->viewport()->width() - m_floatingToolbar->width();
-      const int maxY = m_pView->viewport()->height() - m_floatingToolbar->height();
-
-      // Clamp the position so it cannot go below 0 or above Max
-      newPos.setX(qBound(0, newPos.x(), maxX));
-      newPos.setY(qBound(0, newPos.y(), maxY));
-
-      m_floatingToolbar->move(newPos);
-      updatePopoutPositions();  // Keep popouts glued to the side
-      return true;
-    } else if (event->type() == QEvent::MouseButtonRelease && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
-      m_isDraggingToolbar = false;
-      return true;
-    }
-  }
-
   if (event->type() == QEvent::MouseMove) {
     QPoint viewPos = m_pView->viewport()->mapFromGlobal(static_cast<QMouseEvent*>(event)->globalPosition().toPoint());
     m_pHRuler->updateCursorPos(viewPos);
     m_pVRuler->updateCursorPos(viewPos);
   }
 
-  if (watched == m_pView->viewport() && m_pScene != nullptr) {
-    if (m_currentMode == PresenterMode::Laser && event->type() == QEvent::MouseMove) {
-      m_pScene->updateLaserPosition(m_pView->mapToScene(static_cast<QMouseEvent*>(event)->pos()));
-      return true;
-    }
-
-    if (m_currentMode == PresenterMode::Draw && m_pDrawingManager) {
-      if (m_pDrawingManager->handleViewportEvent(event, m_pView)) {
-        return true;
-      }
-    }
+  if (m_pPresenter && m_pPresenter->handleViewportEvent(watched, event)) {
+    return true;
   }
 
   return QMainWindow::eventFilter(watched, event);
@@ -756,6 +707,7 @@ void MainWindow::loadLayout() {
     m_pScene = new LayoutScene(0, 0, 1920, 1080, this);
     m_pScene->setItemIndexMethod(QGraphicsScene::NoIndex);
     m_pView->setScene(m_pScene);
+    m_pPresenter->setScene(m_pScene);
     connectSceneSignals();
     updateInterfaceState();
   }
@@ -802,289 +754,6 @@ void MainWindow::createMenuBar() {
 
   QAction* settAct = viewMenu->addAction("Settings...");
   connect(settAct, &QAction::triggered, this, &MainWindow::openSettings);
-}
-
-#include <QColorDialog>
-void MainWindow::createFloatingToolbar() {
-  // Ensure it is bound strictly to the viewport
-  m_floatingToolbar = new QWidget(m_pView);
-  m_floatingToolbar->setObjectName("FloatingToolbar");
-
-  // Smooth rounded corners (border-radius: 12px)
-  m_floatingToolbar->setStyleSheet(
-      "#FloatingToolbar { background-color: rgba(30, 30, 30, 210); border-radius: 2px; border: 1px solid #444; }"
-      "QPushButton { color: white; background: transparent; border: 1px solid #555; border-radius: 2px; padding: 6px 12px; }"
-      "QPushButton:hover { background: rgba(255, 255, 255, 20); }"
-      "QPushButton:checked { background: #E53935; border: 1px solid #ff5252; }");
-
-  QVBoxLayout* mainLayout = new QVBoxLayout(m_floatingToolbar);
-  mainLayout->setContentsMargins(8, 4, 8, 8);
-  mainLayout->setSpacing(6);
-
-  // --- THE DRAG HANDLE ---
-  // Using a horizontal dots character for a clean, modern handle
-  // QLabel* dragHandle = new QLabel("⋮⋮⋮⋮⋮⋮", m_floatingToolbar);
-  // dragHandle->setAlignment(Qt::AlignCenter);
-  // dragHandle->setCursor(Qt::SizeAllCursor);
-  // dragHandle->setStyleSheet("color: #888; font-weight: bold; letter-spacing: 2px; padding-bottom: 2px;");
-  // mainLayout->addWidget(dragHandle);
-
-  DragHandleWidget* dragHandle = new DragHandleWidget(m_floatingToolbar);
-  mainLayout->addWidget(dragHandle);
-
-  // Recreate your original buttons
-  m_pBtnEdit = new QPushButton(QIcon(":/icons/move.svg"), "");
-  m_pBtnDraw = new QPushButton(QIcon(":/icons/draw.svg"), "");
-  m_pBtnLaser = new QPushButton(QIcon(":/icons/laser.svg"), "");
-  m_pBtnClear = new QPushButton(QIcon(":/icons/clear.svg"), "");
-
-  m_pBtnEdit->setFixedSize(24, 24);
-  m_pBtnDraw->setFixedSize(24, 24);
-  m_pBtnLaser->setFixedSize(24, 24);
-  m_pBtnClear->setFixedSize(24, 24);
-
-  m_pBtnEdit->setCheckable(true);
-  m_pBtnDraw->setCheckable(true);
-  m_pBtnLaser->setCheckable(true);
-  m_pBtnEdit->setChecked(true);  // Default state
-
-  mainLayout->addWidget(m_pBtnEdit);
-  mainLayout->addWidget(m_pBtnDraw);
-  mainLayout->addWidget(m_pBtnLaser);
-  mainLayout->addWidget(m_pBtnClear);
-
-  // Connect once here (not per-layout, which stacks handlers). The drawing
-  // manager is recreated per layout, so guard against it being absent.
-  connect(m_pBtnClear, &QPushButton::clicked, this, [this]() {
-    if (m_pDrawingManager) {
-      m_pDrawingManager->clearDrawings();
-    }
-  });
-
-  // Initial position
-  m_floatingToolbar->move(20, 20);
-  m_floatingToolbar->show();
-  m_floatingToolbar->raise();
-
-  // Install the event filter so we can drag it
-  m_floatingToolbar->installEventFilter(this);
-
-  m_laserSettingsWidget = new QWidget(m_pView->viewport());
-  m_laserSettingsWidget->setStyleSheet("background-color: rgba(30, 30, 30, 220); border-radius: 8px; color: white;");
-  m_laserSettingsWidget->hide();  // Hidden by default
-
-  QHBoxLayout* laserLayout = new QHBoxLayout(m_laserSettingsWidget);
-  laserLayout->setContentsMargins(10, 5, 10, 5);
-
-  QLabel* laserLbl = new QLabel("Size:");
-  QSlider* laserSlider = new QSlider(Qt::Horizontal);
-  laserSlider->setRange(5, 50);
-  laserSlider->setValue(m_laserSize);
-
-  QPushButton* laserColorBtn = new QPushButton();
-  laserColorBtn->setFixedSize(20, 20);
-  laserColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(m_laserColor.name()));
-
-  laserLayout->addWidget(laserLbl);
-  laserLayout->addWidget(laserSlider);
-  laserLayout->addWidget(laserColorBtn);
-
-  // Laser Connections
-  connect(laserSlider, &QSlider::valueChanged, this, [this](int val) {
-    m_laserSize = val;
-    // Route to the new native scene laser
-    if (m_pScene) {
-      m_pScene->setLaserSize(val);
-    }
-  });
-
-  connect(laserColorBtn, &QPushButton::clicked, this, [this, laserColorBtn]() {
-    QColor color = QColorDialog::getColor(m_laserColor, this, "Laser Color", QColorDialog::DontUseNativeDialog);
-    if (color.isValid()) {
-      m_laserColor = color;
-      laserColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(color.name()));
-      if (m_pScene) {
-        m_pScene->setLaserColor(color);
-      }
-    }
-  });
-
-  connect(m_pBtnLaser, &QPushButton::toggled, this, [this](bool checked) {
-    if (checked) {
-      m_currentMode = PresenterMode::Laser;
-      m_pBtnEdit->setChecked(false);
-      m_pBtnDraw->setChecked(false);
-      if (m_laserSettingsWidget) {
-        m_laserSettingsWidget->show();
-        updatePopoutPositions();
-        m_laserSettingsWidget->raise();
-      }
-      if (m_pScene) {
-        m_pScene->setLaserActive(true);
-      }
-    } else {
-      if (m_laserSettingsWidget)
-        m_laserSettingsWidget->hide();
-
-      if (m_pScene) {
-        m_pScene->setLaserActive(false);
-      }
-      if (!m_pBtnDraw->isChecked())
-        m_pBtnEdit->setChecked(true);
-    }
-  });
-  // ==========================================
-  // 2. CREATE DRAW POPOUT
-  // ==========================================
-  m_drawSettingsWidget = new QWidget(m_pView->viewport());
-  m_drawSettingsWidget->setStyleSheet("background-color: rgba(30, 30, 30, 220); border-radius: 8px; color: white;");
-  m_drawSettingsWidget->hide();
-
-  QVBoxLayout* drawLayout = new QVBoxLayout(m_drawSettingsWidget);
-  drawLayout->setContentsMargins(10, 5, 10, 5);
-  drawLayout->setSpacing(8);
-
-  QComboBox* shapeCombo = new QComboBox();
-  shapeCombo->setStyleSheet("background-color: #333; color: white; border: none; padding: 2px;");
-  shapeCombo->addItem("Freehand", QVariant::fromValue(DrawShape::Freehand));
-  shapeCombo->addItem("Marker", QVariant::fromValue(DrawShape::Marker));
-  shapeCombo->addItem("Rectangle", QVariant::fromValue(DrawShape::Rectangle));
-  shapeCombo->addItem("Circle", QVariant::fromValue(DrawShape::Ellipse));
-
-  QSlider* drawSlider = new QSlider(Qt::Horizontal);
-  drawSlider->setRange(1, 30);
-  drawSlider->setValue(m_drawSize);
-
-  QPushButton* drawColorBtn = new QPushButton();
-  drawColorBtn->setFixedSize(20, 20);
-  drawColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(m_drawColor.name()));
-
-  QPushButton* undoBtn = new QPushButton(QIcon(":/icons/undo.svg"), "");
-  QPushButton* redoBtn = new QPushButton(QIcon(":/icons/redo.svg"), "");
-
-  undoBtn->setFixedSize(24, 24);
-  redoBtn->setFixedSize(24, 24);
-
-  QString btnStyle =
-      "QPushButton { background-color: #444; border: 1px solid #666; border-radius: 3px; padding: 2px 6px; font-size: 11px; }"
-      "QPushButton:hover { background-color: #555; }"
-      "QPushButton:pressed { background-color: #333; }";
-
-  undoBtn->setStyleSheet(btnStyle);
-  redoBtn->setStyleSheet(btnStyle);
-
-  QHBoxLayout* drawSettingsLayout = new QHBoxLayout();
-  drawSettingsLayout->addWidget(shapeCombo);
-  drawSettingsLayout->addWidget(drawSlider);
-  drawSettingsLayout->addWidget(drawColorBtn);
-
-  // QFrame* vLine = new QFrame();
-  // vLine->setFrameShape(QFrame::VLine);
-  // vLine->setFrameShadow(QFrame::Sunken);
-  // vLine->setStyleSheet("color: #666;");
-  // drawLayout->addWidget(vLine);
-
-  QHBoxLayout* undoRedoLayout = new QHBoxLayout();
-  undoRedoLayout->addWidget(undoBtn);
-  undoRedoLayout->addWidget(redoBtn);
-  undoRedoLayout->addStretch();
-
-  drawLayout->addLayout(drawSettingsLayout);
-  drawLayout->addLayout(undoRedoLayout);
-
-  connect(undoBtn, &QPushButton::clicked, this, [this]() {
-    if (m_pDrawingManager) {
-      m_pDrawingManager->undo();
-    }
-  });
-
-  connect(redoBtn, &QPushButton::clicked, this, [this]() {
-    if (m_pDrawingManager) {
-      m_pDrawingManager->redo();
-    }
-  });
-
-  // Draw Connections
-  connect(shapeCombo, &QComboBox::currentIndexChanged, this, [this, shapeCombo](int index) {
-    m_currentShape = shapeCombo->itemData(index).value<DrawShape>();
-    // Sync with DrawingManager
-    if (m_pDrawingManager) {
-      m_pDrawingManager->setShape(static_cast<DrawingManager::Shape>(m_currentShape));
-    }
-  });
-
-  connect(drawSlider, &QSlider::valueChanged, this, [this](int val) {
-    m_drawSize = val;
-    // Sync with DrawingManager
-    if (m_pDrawingManager) {
-      m_pDrawingManager->setSize(val);
-    }
-  });
-
-  connect(drawColorBtn, &QPushButton::clicked, this, [this, drawColorBtn]() {
-    QColor color = QColorDialog::getColor(m_drawColor, this, "Draw Color", QColorDialog::DontUseNativeDialog);
-    if (color.isValid()) {
-      m_drawColor = color;
-      drawColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(color.name()));
-      // Sync with DrawingManager
-      if (m_pDrawingManager) {
-        m_pDrawingManager->setColor(m_drawColor);
-      }
-    }
-  });
-
-  // 1. Edit/Cursor Mode Button
-  connect(m_pBtnEdit, &QPushButton::toggled, this, [this](bool checked) {
-    if (checked) {
-      m_currentMode = PresenterMode::EditLayout;
-
-      // Programmatically turn off the others
-      m_pBtnDraw->setChecked(false);
-      m_pBtnLaser->setChecked(false);
-    }
-  });
-
-  // 3. Draw Button
-  connect(m_pBtnDraw, &QPushButton::toggled, this, [this](bool checked) {
-    if (checked) {
-      m_currentMode = PresenterMode::Draw;
-
-      // Programmatically turn off the others
-      m_pBtnEdit->setChecked(false);
-      m_pBtnLaser->setChecked(false);
-
-      if (m_drawSettingsWidget) {
-        m_drawSettingsWidget->show();
-        updatePopoutPositions();
-        m_drawSettingsWidget->raise();
-      }
-    } else {
-      // Clean up when turned off
-      if (m_drawSettingsWidget)
-        m_drawSettingsWidget->hide();
-
-      // If the user manually turned the draw tool off, fall back to Edit mode
-      if (!m_pBtnLaser->isChecked()) {
-        m_pBtnEdit->setChecked(true);
-      }
-    }
-  });
-}
-
-void MainWindow::updatePopoutPositions() {
-  if (!m_floatingToolbar) {
-    return;
-  }
-
-  // Calculate position: right edge of main toolbar + 10px gap, aligned vertically
-  QPoint targetPos = m_floatingToolbar->pos() + QPoint(m_floatingToolbar->width() + 10, 0);
-
-  if (m_laserSettingsWidget && m_laserSettingsWidget->isVisible()) {
-    m_laserSettingsWidget->move(targetPos);
-  }
-  if (m_drawSettingsWidget && m_drawSettingsWidget->isVisible()) {
-    m_drawSettingsWidget->move(targetPos);
-  }
 }
 
 void MainWindow::createToolbar() {
@@ -1392,55 +1061,7 @@ void MainWindow::createToolbar() {
 
   m_pSectionView->addWidget(barsContainer, 1, 0);
 
-  m_pSectionFormat = ribbon->addSection("Format", QIcon(":/icons/draw.svg"));
-
-  QWidget* formatContainer = new QWidget();
-  formatContainer->setFixedWidth(180);
-  QVBoxLayout* formatGrid = new QVBoxLayout(formatContainer);
-  formatGrid->setContentsMargins(0, 0, 0, 0);
-  formatGrid->setSpacing(5);
-
-  m_pFormatLineWidthSpin = new QSpinBox();
-  m_pFormatLineWidthSpin->setRange(1, 100);
-  m_pFormatLineWidthSpin->setSuffix(" px");
-  m_pFormatLineWidthSpin->setStyleSheet(spinStyle);
-
-  QHBoxLayout* sizeLayout = new QHBoxLayout();
-  QLabel* sizeLabel = new QLabel("Size:");
-  sizeLabel->setStyleSheet("QLabel {color: black;}");
-  sizeLayout->addWidget(sizeLabel);
-  sizeLayout->addWidget(m_pFormatLineWidthSpin);
-
-  QHBoxLayout* lineColorLayout = new QHBoxLayout();
-  QLabel* lineColorLabel = new QLabel("Line color:");
-  m_pFormatLineColorBtn = new QPushButton();
-  m_pFormatLineColorBtn->setFixedSize(20, 20);
-  m_pFormatLineColorBtn->setCursor(Qt::PointingHandCursor);
-  lineColorLayout->addWidget(lineColorLabel);
-  lineColorLayout->addWidget(m_pFormatLineColorBtn);
-
-  // Fill container (hidden for paths)
-  m_pFormatFillContainer = new QWidget();
-  QHBoxLayout* fillLayout = new QHBoxLayout(m_pFormatFillContainer);
-  fillLayout->setContentsMargins(0, 0, 0, 0);
-  fillLayout->setSpacing(5);
-  QLabel* fillLabel = new QLabel("Fill:");
-  fillLayout->addWidget(fillLabel);
-  m_pFormatFillColorBtn = new QPushButton();
-  m_pFormatFillColorBtn->setFixedSize(20, 20);
-  m_pFormatFillColorBtn->setCursor(Qt::PointingHandCursor);
-  fillLayout->addWidget(m_pFormatFillColorBtn);
-
-  formatGrid->addLayout(sizeLayout);
-  formatGrid->addLayout(lineColorLayout);
-  formatGrid->addLayout(fillLayout);
-
-  m_pSectionFormat->addWidget(formatContainer, 0, 0);
-  m_pSectionFormat->setVisible(false);  // <--- Hidden by default
-
-  connect(m_pFormatLineWidthSpin, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::onFormatLineWidthChanged);
-  connect(m_pFormatLineColorBtn, &QPushButton::clicked, this, &MainWindow::onFormatLineColorClicked);
-  connect(m_pFormatFillColorBtn, &QPushButton::clicked, this, &MainWindow::onFormatFillColorClicked);
+  m_pFormatPanel = new FormatPanel(ribbon, spinStyle, this);
 
   ribbon->addSpacer();
 }
@@ -1452,34 +1073,9 @@ void MainWindow::onSelectionChanged() {
 
   QList<QGraphicsItem*> sel = m_pScene->selectedItems();
 
-  // --- Handle Contextual Ribbon Visibility ---
-  bool showFormat = false;
-  if (!sel.isEmpty()) {
-    QGraphicsItem* item = sel.first();
-    // Ensure it's a drawn shape, NOT a custom App/Zone item
-    if (item->type() == QGraphicsPathItem::Type || item->type() == QGraphicsRectItem::Type || item->type() == QGraphicsEllipseItem::Type) {
-      showFormat = true;
-      auto shapeItem = static_cast<QAbstractGraphicsShapeItem*>(item);
-
-      // Populate the Ribbon fields with current values
-      m_pFormatLineWidthSpin->blockSignals(true);
-      m_pFormatLineWidthSpin->setValue(shapeItem->pen().width());
-      m_pFormatLineWidthSpin->blockSignals(false);
-
-      updateFormatButtonColor(m_pFormatLineColorBtn, shapeItem->pen().color());
-
-      // Hide Fill option if it's a Freehand line
-      if (item->type() == QGraphicsPathItem::Type) {
-        m_pFormatFillContainer->hide();
-      } else {
-        m_pFormatFillContainer->show();
-        updateFormatButtonColor(m_pFormatFillColorBtn, shapeItem->brush().color());
-      }
-    }
-  }
-
-  // Show or Hide the section
-  m_pSectionFormat->setVisible(showFormat);
+  // The format panel shows itself for drawn shapes and reports whether it took
+  // over, so we can suppress the properties dialog for those.
+  const bool showFormat = m_pFormatPanel->updateForSelection(sel.isEmpty() ? nullptr : sel.first());
 
   // --- Existing Properties Dialog Logic ---
   if (!m_pProperties->isVisible())
@@ -1502,57 +1098,3 @@ void MainWindow::onSelectionChanged() {
   }
 }
 
-void MainWindow::updateFormatButtonColor(QPushButton* btn, const QColor& color) {
-  const QString colorName = (color.isValid() && color.alpha() > 0) ? color.name() : "transparent";
-  btn->setStyleSheet(QStringLiteral("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(colorName));
-}
-
-void MainWindow::onFormatLineWidthChanged(int val) {
-  if (!m_pScene || m_pScene->selectedItems().isEmpty()) {
-    return;
-  }
-
-  const QList<QGraphicsItem*> selectedItems = m_pScene->selectedItems();
-  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(selectedItems.first());
-  if (shape) {
-    QPen pen = shape->pen();
-    pen.setWidth(val);
-    shape->setPen(pen);
-  }
-}
-
-void MainWindow::onFormatLineColorClicked() {
-  if (!m_pScene || m_pScene->selectedItems().isEmpty()) {
-    return;
-  }
-
-  const QList<QGraphicsItem*> selectedItems = m_pScene->selectedItems();
-  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(selectedItems.first());
-  if (shape) {
-    QColor newColor =
-        QColorDialog::getColor(shape->pen().color(), this, "Line Color", QColorDialog::ShowAlphaChannel | QColorDialog::DontUseNativeDialog);
-    if (newColor.isValid()) {
-      QPen pen = shape->pen();
-      pen.setColor(newColor);
-      shape->setPen(pen);
-      updateFormatButtonColor(m_pFormatLineColorBtn, newColor);
-    }
-  }
-}
-
-void MainWindow::onFormatFillColorClicked() {
-  if (!m_pScene || m_pScene->selectedItems().isEmpty()) {
-    return;
-  }
-
-  const QList<QGraphicsItem*> selectedItems = m_pScene->selectedItems();
-  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(selectedItems.first());
-  if (shape) {
-    QColor newColor =
-        QColorDialog::getColor(shape->brush().color(), this, "Fill Color", QColorDialog::ShowAlphaChannel | QColorDialog::DontUseNativeDialog);
-    if (newColor.isValid()) {
-      shape->setBrush(QBrush(newColor));
-      updateFormatButtonColor(m_pFormatFillColorBtn, newColor);
-    }
-  }
-}

@@ -12,8 +12,7 @@
 
 #include "snappingitemgroup.h"
 
-#include "drawingmanager.h"
-
+class QGraphicsScene;
 class LayoutScene;
 class RulerBar;
 class PropertiesDialog;
@@ -23,6 +22,8 @@ class QPushButton;
 
 class ProjectorWindow;
 class WindowSelector;
+class PresenterController;
+class FormatPanel;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -73,15 +74,9 @@ private slots:
 
   void openSettings();
 
-  void onFormatLineWidthChanged(int val);
-  void onFormatLineColorClicked();
-  void onFormatFillColorClicked();
-  void updateFormatButtonColor(QPushButton* btn, const QColor& color);
-
 private:
   void createToolbar();
   void createMenuBar();
-  void createFloatingToolbar();
   void updateRulers();
   void updateInterfaceState();
   bool maybeSave();
@@ -90,12 +85,6 @@ private:
   void connectSceneSignals();
 
   QString getTemplateXml(const QString& name);
-
-  void updatePopoutPositions();
-
-  // Define our three operating modes
-  enum class PresenterMode { EditLayout, Draw, Laser };
-  enum class DrawShape { Freehand, Marker, Rectangle, Ellipse };
 
   LayoutScene* m_pScene;
   QGraphicsView* m_pView;
@@ -127,18 +116,7 @@ private:
 
   bool m_isModified;
 
-  QPushButton* m_pBtnEdit;
-  QPushButton* m_pBtnDraw;
-  QPushButton* m_pBtnLaser;
-  QPushButton* m_pBtnClear;
-
-  PresenterMode m_currentMode = PresenterMode::EditLayout;
-
-  // The floating UI
-  QWidget* m_floatingToolbar = nullptr;
-
-  bool m_isDraggingToolbar = false;
-  QPoint m_dragOffset;
+  PresenterController* m_pPresenter = nullptr;
 
   bool m_wasMaximized = false;
   WindowSelector* m_selector = nullptr;
@@ -146,22 +124,7 @@ private:
 
   bool m_isSelectingWindow = false;
 
-  QWidget* m_laserSettingsWidget = nullptr;
-  QWidget* m_drawSettingsWidget = nullptr;
-
-  DrawShape m_currentShape = DrawShape::Freehand;
-  QColor m_laserColor = Qt::red;
-  int m_laserSize = 15;
-  QColor m_drawColor = Qt::blue;
-  int m_drawSize = 4;
-
-  DrawingManager* m_pDrawingManager = nullptr;
-
-  RibbonSection* m_pSectionFormat;
-  QSpinBox* m_pFormatLineWidthSpin;
-  QPushButton* m_pFormatLineColorBtn;
-  QPushButton* m_pFormatFillColorBtn;
-  QWidget* m_pFormatFillContainer;
+  FormatPanel* m_pFormatPanel = nullptr;
 };
 
 #endif  // MAINWINDOW_H
