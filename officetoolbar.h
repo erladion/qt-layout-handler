@@ -34,7 +34,6 @@ public:
   ~RibbonSection();
 
   void addLargeButton(RibbonButton* btn);
-  void addSmallButton(RibbonButton* btn, int col = 0);
   void addWidget(QWidget* widget, int row, int col);
 
   void setMode(Mode mode);

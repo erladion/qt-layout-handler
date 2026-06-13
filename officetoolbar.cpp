@@ -118,10 +118,6 @@ void RibbonSection::addLargeButton(RibbonButton* btn) {
   }
 }
 
-void RibbonSection::addSmallButton(RibbonButton* btn, int col) {
-  Q_UNUSED(col);
-}
-
 void RibbonSection::addWidget(QWidget* widget, int row, int col) {
   m_pContentGrid->addWidget(widget, row, col);
   if (col >= m_gridColCount) {
