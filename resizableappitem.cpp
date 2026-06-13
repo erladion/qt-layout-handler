@@ -374,25 +374,18 @@ int ResizableAppItem::getHandleAt(const QPointF& pt) {
 
 void ResizableAppItem::initActions() {
   QAction* propAction = new QAction("Properties", this);
-  QAction* removeAction = new QAction("Remove", this);
 
   connect(propAction, &QAction::triggered, this, [this]() {
     setSelected(true);
     emit propertiesRequested(this);  // Signal based!
   });
 
-  connect(removeAction, &QAction::triggered, this, [this]() {
-    if (scene())
-      scene()->removeItem(this);
-    this->deleteLater();  // Safe Deletion
-  });
-
   m_pContextMenu.addAction(propAction);
-  m_pContextMenu.addAction(removeAction);
 
   QAction* sep = new QAction(this);
   sep->setSeparator(true);
   m_pContextMenu.addAction(sep);
 
-  setupCustomActions();  // Let derived classes inject actions
+  // Adds the standard Lock / z-order / Remove actions.
+  setupCustomActions();
 }
