@@ -301,7 +301,10 @@ GstFlowReturn MirroredAppItem::onNewSample(GstElement* sink, gpointer data) {
 
   emit item->newFrameReceived();
 
-  if (item->m_sourceSize != QSize(width, height)) {
+  // m_lastFrameSize is only touched on this streaming thread, so the shared
+  // m_sourceSize stays main-thread-only (set inside the queued lambda below).
+  if (item->m_lastFrameSize != QSize(width, height)) {
+    item->m_lastFrameSize = QSize(width, height);
     QTimer::singleShot(0, item, [item, width, height]() {
       item->m_sourceSize = QSize(width, height);
       double targetRatio = static_cast<double>(width) / height;

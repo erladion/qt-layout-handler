@@ -79,6 +79,7 @@ private:
   QMutex m_frameMutex;
   bool m_frameReady = false;
   QImage m_bufferImage;
+  QSize m_lastFrameSize;  // Streaming-thread only; gates the main-thread resize
 
   QString m_captureSource;
 
