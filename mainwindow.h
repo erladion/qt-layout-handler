@@ -99,6 +99,7 @@ private:
 
   LayoutScene* m_pScene;
   QGraphicsView* m_pView;
+  QGraphicsScene* m_pEmptyScene = nullptr;  // Placeholder so the GL viewport paints with no layout
 
   RulerBar* m_pHRuler;
   RulerBar* m_pVRuler;

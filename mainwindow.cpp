@@ -64,6 +64,12 @@ MainWindow::MainWindow(QWidget* parent)
   m_pView->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_pView->setResizeAnchor(QGraphicsView::AnchorViewCenter);
   m_pView->setOptimizationFlags(QGraphicsView::DontSavePainterState | QGraphicsView::DontAdjustForAntialiasing);
+
+  // The OpenGL viewport is only painted when the view has a scene, so without
+  // a layout it would stay transparent. Give it an empty placeholder scene.
+  m_pEmptyScene = new QGraphicsScene(this);
+  m_pView->setScene(m_pEmptyScene);
+
   m_pView->viewport()->setMouseTracking(true);
   m_pView->viewport()->installEventFilter(this);
 
@@ -273,6 +279,9 @@ void MainWindow::newLayout() {
     connectSceneSignals();
 
     m_pView->setScene(m_pScene);
+    if (m_pProjector) {
+      m_pProjector->setScene(m_pScene);
+    }
     updateInterfaceState();
     setModified(false);
 
@@ -306,7 +315,7 @@ void MainWindow::closeLayout() {
     return;
   }
 
-  m_pView->setScene(nullptr);
+  m_pView->setScene(m_pEmptyScene);
 
   // Destroy the drawing manager while its scene is still alive so it removes
   // and deletes its own items instead of being left with dangling pointers.
