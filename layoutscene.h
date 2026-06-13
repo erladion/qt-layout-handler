@@ -53,6 +53,9 @@ public:
 
   void alignSelection(Alignment alignment);
 
+signals:
+  void itemPropertiesRequested(QGraphicsItem* item);
+
 public slots:
   void distributeSelectionH();
   void distributeSelectionV();

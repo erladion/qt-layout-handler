@@ -341,6 +341,8 @@ ResizableAppItem* LayoutScene::addAppItem(const QString& name, const QRectF& rec
   ResizableAppItem* item = new ResizableAppItem(name, rect);
   qreal scale = sceneRect().height() / 1080.0;
   item->setFontScale(scale);
+  item->initActions();
+  connect(item, &ResizableAppItem::propertiesRequested, this, &LayoutScene::itemPropertiesRequested);
   addItem(item);
   return item;
 }

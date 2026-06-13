@@ -176,6 +176,7 @@ void MainWindow::connectSceneSignals() {
 
   connect(m_pScene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
   connect(m_pScene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
+  connect(m_pScene, &LayoutScene::itemPropertiesRequested, this, &MainWindow::showProperties);
 }
 
 void MainWindow::updateInterfaceState() {
