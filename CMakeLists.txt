@@ -77,7 +77,6 @@ set(PROJECT_SOURCES
         newlayoutdialog.h newlayoutdialog.cpp
         settingsdialog.h settingsdialog.cpp
         constants.h
-        laserpointeritem.h laserpointeritem.cpp
         windowselector.h windowselector.cpp
         projectorwindow.h projectorwindow.cpp
         mirroredappitem.h mirroredappitem.cpp
