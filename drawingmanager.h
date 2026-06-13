@@ -2,12 +2,13 @@
 #define DRAWINGMANAGER_H
 
 #include <QColor>
+#include <QGraphicsScene>
 #include <QList>
 #include <QObject>
 #include <QPainterPath>
 #include <QPointF>
+#include <QPointer>
 
-class QGraphicsScene;
 class QGraphicsView;
 class QGraphicsItem;
 class QGraphicsPathItem;
@@ -35,7 +36,7 @@ public:
   bool canRedo() const;
 
 private:
-  QGraphicsScene* m_pScene;
+  QPointer<QGraphicsScene> m_pScene;
   QGraphicsPathItem* m_drawingLayer;
   QGraphicsItem* m_activeDrawItem;
 

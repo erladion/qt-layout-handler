@@ -307,6 +307,13 @@ void MainWindow::closeLayout() {
 
   m_pView->setScene(nullptr);
 
+  // Destroy the drawing manager while its scene is still alive so it removes
+  // and deletes its own items instead of being left with dangling pointers.
+  if (m_pDrawingManager) {
+    delete m_pDrawingManager;
+    m_pDrawingManager = nullptr;
+  }
+
   m_pScene->deleteLater();
   m_pScene = nullptr;
 

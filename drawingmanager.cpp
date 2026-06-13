@@ -34,27 +34,29 @@ void DrawingManager::setSize(int size) {
 }
 
 void DrawingManager::clearDrawings() {
-  for (QGraphicsItem* item : std::as_const(m_drawnItems)) {
-    if (m_pScene && item->scene() == m_pScene) {
-      m_pScene->removeItem(item);
+  // If the scene was destroyed it already deleted the items we added to it, so
+  // only drop our now-dangling references. While it is alive, remove and delete.
+  if (m_pScene) {
+    for (QGraphicsItem* item : std::as_const(m_drawnItems)) {
+      if (item->scene() == m_pScene) {
+        m_pScene->removeItem(item);
+      }
+      delete item;
     }
-    if (item == m_activeDrawItem) {
-      m_activeDrawItem = nullptr;
-    }
-    delete item;
   }
   m_drawnItems.clear();
+  m_activeDrawItem = nullptr;
 
+  // Undone items are not in any scene, so we own them and must always delete.
   for (QGraphicsItem* item : std::as_const(m_undoneItems)) {
-    delete item;  // These are already removed from the scene, so just delete
+    delete item;
   }
   m_undoneItems.clear();
 
   m_currentPath.clear();
-  if (m_drawingLayer) {
+  if (m_pScene && m_drawingLayer) {
     m_drawingLayer->setPath(m_currentPath);
   }
-  m_activeDrawItem = nullptr;
 }
 
 bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
