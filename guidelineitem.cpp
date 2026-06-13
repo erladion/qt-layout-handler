@@ -36,6 +36,8 @@ void GuideLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* opt
   Q_UNUSED(option);
   Q_UNUSED(widget);
 
+  painter->save();
+
   painter->setPen(pen());
   painter->drawLine(line());
 
@@ -55,6 +57,7 @@ void GuideLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* opt
     arrow << QPointF(0, -10) << QPointF(-5, 0) << QPointF(5, 0);
     painter->drawPolygon(arrow);
   }
+  painter->restore();
 }
 
 QVariant GuideLineItem::itemChange(GraphicsItemChange change, const QVariant& value) {

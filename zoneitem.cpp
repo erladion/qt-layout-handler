@@ -35,6 +35,8 @@ void ZoneItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
   Q_UNUSED(option);
   Q_UNUSED(widget);
 
+  painter->save();
+
   painter->setPen(pen());
   painter->setBrush(brush());
   painter->drawRect(rect());
@@ -44,6 +46,7 @@ void ZoneItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
     painter->setBrush(Qt::NoBrush);
     painter->drawRect(rect());
   }
+  painter->restore();
 }
 
 QVariant ZoneItem::itemChange(GraphicsItemChange change, const QVariant& value) {

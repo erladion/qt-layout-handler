@@ -1187,8 +1187,9 @@ void MainWindow::createToolbar() {
       QScreen* screen = screens[i];
 
       // Format looks like: "Screen 2: DELL U2720Q (3840x2160)"
-      QString screenName =
-          QString("Screen %1: %2 (%3x%4)").arg(i + 1).arg(screen->name()).arg(screen->geometry().width()).arg(screen->geometry().height());
+      const QString screenName =
+          QStringLiteral("Screen %1: %2 (%3x%4)")
+              .arg(QString::number(i + 1), screen->name(), QString::number(screen->geometry().width()), QString::number(screen->geometry().height()));
 
       QAction* screenAct = projMenu->addAction(screenName);
       connect(screenAct, &QAction::triggered, this, [this, screen]() {
@@ -1343,7 +1344,7 @@ void MainWindow::createToolbar() {
 
   m_pSectionView->addWidget(gridContainer, 0, 0);
 
-  QString spinStyle =
+  const QString spinStyle =
       QString(Constants::Style::SpinBox)
           .arg(QColor(Constants::Color::SpinBoxLightBg).name(), QColor(Constants::Color::SpinBoxLightText).name(),
                QColor(Constants::Color::SpinBoxLightBorder).name(), QColor(Constants::Color::SpinBoxLightSelection).name(),
@@ -1371,49 +1372,68 @@ void MainWindow::createToolbar() {
 
   QWidget* barsContainer = new QWidget();
   barsContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-  QHBoxLayout* barsLayout = new QHBoxLayout(barsContainer);
+  QVBoxLayout* barsLayout = new QVBoxLayout(barsContainer);
   barsLayout->setContentsMargins(0, 0, 0, 0);
   barsLayout->setSpacing(5);
 
-  barsLayout->addWidget(new QLabel("Top:"));
-  barsLayout->addWidget(m_pTopBarSpin);
-  barsLayout->addWidget(new QLabel("Bot:"));
-  barsLayout->addWidget(m_pBotBarSpin);
+  QHBoxLayout* topLayout = new QHBoxLayout(barsContainer);
+  topLayout->setContentsMargins(0, 0, 0, 0);
+
+  QHBoxLayout* bottomLayout = new QHBoxLayout(barsContainer);
+  bottomLayout->setContentsMargins(0, 0, 0, 0);
+
+  topLayout->addWidget(new QLabel("Top:"));
+  topLayout->addWidget(m_pTopBarSpin);
+  bottomLayout->addWidget(new QLabel("Bot:"));
+  bottomLayout->addWidget(m_pBotBarSpin);
+
+  barsLayout->addLayout(topLayout);
+  barsLayout->addLayout(bottomLayout);
 
   m_pSectionView->addWidget(barsContainer, 1, 0);
 
   m_pSectionFormat = ribbon->addSection("Format", QIcon(":/icons/draw.svg"));
 
   QWidget* formatContainer = new QWidget();
-  QGridLayout* formatGrid = new QGridLayout(formatContainer);
+  formatContainer->setFixedWidth(180);
+  QVBoxLayout* formatGrid = new QVBoxLayout(formatContainer);
   formatGrid->setContentsMargins(0, 0, 0, 0);
   formatGrid->setSpacing(5);
 
   m_pFormatLineWidthSpin = new QSpinBox();
   m_pFormatLineWidthSpin->setRange(1, 100);
   m_pFormatLineWidthSpin->setSuffix(" px");
-  m_pFormatLineWidthSpin->setStyleSheet("background-color: white; color: black;");  // Optional basic styling
+  m_pFormatLineWidthSpin->setStyleSheet(spinStyle);
 
-  formatGrid->addWidget(new QLabel("Line:"), 0, 0);
-  formatGrid->addWidget(m_pFormatLineWidthSpin, 0, 1);
+  QHBoxLayout* sizeLayout = new QHBoxLayout();
+  QLabel* sizeLabel = new QLabel("Size:", this);
+  sizeLabel->setStyleSheet("QLabel {color: black;}");
+  sizeLayout->addWidget(sizeLabel);
+  sizeLayout->addWidget(m_pFormatLineWidthSpin);
 
+  QHBoxLayout* lineColorLayout = new QHBoxLayout();
+  QLabel* lineColorLabel = new QLabel("Line color:");
   m_pFormatLineColorBtn = new QPushButton();
   m_pFormatLineColorBtn->setFixedSize(20, 20);
   m_pFormatLineColorBtn->setCursor(Qt::PointingHandCursor);
-  formatGrid->addWidget(m_pFormatLineColorBtn, 0, 2);
+  lineColorLayout->addWidget(lineColorLabel);
+  lineColorLayout->addWidget(m_pFormatLineColorBtn);
 
   // Fill container (hidden for paths)
   m_pFormatFillContainer = new QWidget();
   QHBoxLayout* fillLayout = new QHBoxLayout(m_pFormatFillContainer);
   fillLayout->setContentsMargins(0, 0, 0, 0);
   fillLayout->setSpacing(5);
-  fillLayout->addWidget(new QLabel("Fill:"));
+  QLabel* fillLabel = new QLabel("Fill:");
+  fillLayout->addWidget(fillLabel);
   m_pFormatFillColorBtn = new QPushButton();
   m_pFormatFillColorBtn->setFixedSize(20, 20);
   m_pFormatFillColorBtn->setCursor(Qt::PointingHandCursor);
   fillLayout->addWidget(m_pFormatFillColorBtn);
 
-  formatGrid->addWidget(m_pFormatFillContainer, 1, 0, 1, 3);
+  formatGrid->addLayout(sizeLayout);
+  formatGrid->addLayout(lineColorLayout);
+  formatGrid->addLayout(fillLayout);
 
   m_pSectionFormat->addWidget(formatContainer, 0, 0);
   m_pSectionFormat->setVisible(false);  // <--- Hidden by default
@@ -1426,8 +1446,9 @@ void MainWindow::createToolbar() {
 }
 
 void MainWindow::onSelectionChanged() {
-  if (!m_pScene)
+  if (!m_pScene) {
     return;
+  }
 
   QList<QGraphicsItem*> sel = m_pScene->selectedItems();
 
@@ -1482,14 +1503,17 @@ void MainWindow::onSelectionChanged() {
 }
 
 void MainWindow::updateFormatButtonColor(QPushButton* btn, const QColor& color) {
-  QString colorName = (color.isValid() && color.alpha() > 0) ? color.name() : "transparent";
-  btn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(colorName));
+  const QString colorName = (color.isValid() && color.alpha() > 0) ? color.name() : "transparent";
+  btn->setStyleSheet(QStringLiteral("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(colorName));
 }
 
 void MainWindow::onFormatLineWidthChanged(int val) {
-  if (!m_pScene || m_pScene->selectedItems().isEmpty())
+  if (!m_pScene || m_pScene->selectedItems().isEmpty()) {
     return;
-  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(m_pScene->selectedItems().first());
+  }
+
+  const QList<QGraphicsItem*> selectedItems = m_pScene->selectedItems();
+  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(selectedItems.first());
   if (shape) {
     QPen pen = shape->pen();
     pen.setWidth(val);
@@ -1498,9 +1522,12 @@ void MainWindow::onFormatLineWidthChanged(int val) {
 }
 
 void MainWindow::onFormatLineColorClicked() {
-  if (!m_pScene || m_pScene->selectedItems().isEmpty())
+  if (!m_pScene || m_pScene->selectedItems().isEmpty()) {
     return;
-  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(m_pScene->selectedItems().first());
+  }
+
+  const QList<QGraphicsItem*> selectedItems = m_pScene->selectedItems();
+  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(selectedItems.first());
   if (shape) {
     QColor newColor =
         QColorDialog::getColor(shape->pen().color(), this, "Line Color", QColorDialog::ShowAlphaChannel | QColorDialog::DontUseNativeDialog);
@@ -1514,9 +1541,12 @@ void MainWindow::onFormatLineColorClicked() {
 }
 
 void MainWindow::onFormatFillColorClicked() {
-  if (!m_pScene || m_pScene->selectedItems().isEmpty())
+  if (!m_pScene || m_pScene->selectedItems().isEmpty()) {
     return;
-  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(m_pScene->selectedItems().first());
+  }
+
+  const QList<QGraphicsItem*> selectedItems = m_pScene->selectedItems();
+  auto shape = dynamic_cast<QAbstractGraphicsShapeItem*>(selectedItems.first());
   if (shape) {
     QColor newColor =
         QColorDialog::getColor(shape->brush().color(), this, "Fill Color", QColorDialog::ShowAlphaChannel | QColorDialog::DontUseNativeDialog);

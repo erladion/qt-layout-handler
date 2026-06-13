@@ -43,13 +43,10 @@ void WindowSelector::captureWindowUnderCursor() {
     titleStr.replace("\"", "");
     qDebug() << "Captured Windows HWND:" << bestHwnd << "Title:" << windowTitle << titleStr;
 
-    // THE UPGRADE:
-    // We cast the HWND pointer into a 64-bit integer to feed it to GStreamer
-    quint64 hwndInt = static_cast<quint64>(reinterpret_cast<quintptr>(bestHwnd));
-
     // Build the modern hardware-accelerated pipeline!
     // Note: capture-api=wgc (Windows Graphics Capture) is required to target
     // specific application windows rather than the whole monitor.
+    // quint64 hwndInt = static_cast<quint64>(reinterpret_cast<quintptr>(bestHwnd));
     // QString captureSource = QString("d3d11screencapturesrc capture-api=wgc window-handle=%1").arg(hwndInt);
     // emit windowSelectedForGStreamer(captureSource);
 

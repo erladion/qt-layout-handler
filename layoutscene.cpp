@@ -60,14 +60,17 @@ public:
       QPen pen(QColor::fromRgba(Constants::Color::GridLines));
       pen.setWidth(0);
       pen.setCosmetic(true);
+      painter->save();
       painter->setPen(pen);
       painter->drawLines(layoutScene->gridLines());
+      painter->restore();
     }
 
     int topH = layoutScene->topBarHeight();
     int botH = layoutScene->bottomBarHeight();
 
     auto drawBar = [&](const QRectF& barRect, const QString& label) {
+      painter->save();
       painter->fillRect(barRect, QBrush(QColor::fromRgba(Constants::Color::SystemBars)));
       painter->setPen(QColor::fromRgba(Constants::Color::SystemBarText));
 
@@ -77,6 +80,7 @@ public:
       painter->setFont(font);
 
       painter->drawText(barRect.adjusted(10, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft, label);
+      painter->restore();
     };
 
     if (topH > 0) {
@@ -89,9 +93,11 @@ public:
 
     QPen borderPen(Qt::white, 2);
     borderPen.setCosmetic(true);
+    painter->save();
     painter->setPen(borderPen);
     painter->setBrush(Qt::NoBrush);
     painter->drawRect(fullRect);
+    painter->restore();
   }
 
 private:

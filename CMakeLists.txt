@@ -60,7 +60,6 @@ elseif (UNIX AND NOT APPLE)
     )
 endif()
 
-
 set(PROJECT_SOURCES
         main.cpp
         resources.qrc
@@ -84,13 +83,13 @@ set(PROJECT_SOURCES
         mirroredappitem.h mirroredappitem.cpp
         drawingmanager.h drawingmanager.cpp
         crophandleitem.h crophandleitem.cpp
+        draghandlewidget.h draghandlewidget.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(layouteditor
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-        draghandlewidget.h draghandlewidget.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET layouteditor APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -149,7 +148,6 @@ install(TARGETS layouteditor
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-
 
 if(MSVC)
     target_compile_options(layouteditor PRIVATE /Zc:lambda /permissive- /Zc:__cplusplus)

@@ -365,9 +365,11 @@ void MirroredAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* o
     painter->drawImage(rect(), frameToDraw);
     painter->restore();
   } else {
+    painter->save();
     painter->fillRect(rect(), QColor(40, 40, 40, 200));
     painter->setPen(Qt::white);
     painter->drawText(rect(), Qt::AlignCenter, "Waiting for Video Feed...");
+    painter->restore();
   }
 
   QBrush originalBrush = brush();

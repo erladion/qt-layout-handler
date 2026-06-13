@@ -9,7 +9,9 @@
 #include <QResizeEvent>
 #include <QStackedLayout>
 #include <QStyleOption>
+#include <QTimer>
 #include <QVBoxLayout>
+
 #include "constants.h"
 
 // =============================================================================
@@ -62,12 +64,13 @@ RibbonSection::RibbonSection(const QString& title, const QIcon& icon, QWidget* p
   m_pExpandedLayout->setSpacing(0);
 
   m_pContentWidget = new QWidget(m_pExpandedWidget);
+  m_pContentWidget->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::MinimumExpanding);
   m_pContentGrid = new QGridLayout(m_pContentWidget);
   m_pContentGrid->setContentsMargins(0, 0, 0, 0);
   m_pContentGrid->setSpacing(2);
 
   m_pExpandedLayout->addWidget(m_pContentWidget);
-  m_pExpandedLayout->addStretch();
+  // m_pExpandedLayout->addStretch();
 
   m_pTitleLabel = new QLabel(title, m_pExpandedWidget);
   m_pTitleLabel->setAlignment(Qt::AlignCenter);
@@ -297,10 +300,10 @@ bool RibbonSection::eventFilter(QObject* watched, QEvent* event) {
 // OfficeToolbar
 // =============================================================================
 OfficeToolbar::OfficeToolbar(QWidget* parent) : QWidget(parent) {
-  QPalette pal = palette();
-  pal.setColor(QPalette::Window, Qt::white);
-  setAutoFillBackground(true);
-  setPalette(pal);
+  // QPalette pal = palette();
+  // pal.setColor(QPalette::Window, Qt::white);
+  // setAutoFillBackground(true);
+  // setPalette(pal);
 
   m_pLayout = new QHBoxLayout(this);
   m_pLayout->setContentsMargins(0, 0, 0, 0);
@@ -340,48 +343,79 @@ void OfficeToolbar::paintEvent(QPaintEvent* event) {
   p.drawLine(0, height() - 1, width(), height() - 1);
 }
 
+bool OfficeToolbar::event(QEvent* e) {
+  // Whenever a child gets hidden/shown, Qt sends a LayoutRequest to the parent.
+  // We catch it here to re-evaluate our ribbon collapsing logic.
+  if (e->type() == QEvent::LayoutRequest) {
+    QTimer::singleShot(0, this, [this]() { layoutSections(); });
+  }
+  return QWidget::event(e);
+}
+
 void OfficeToolbar::layoutSections() {
   int availableWidth = width();
   int wAllNormal = 0;
   int wAllCompact = 0;
   int wAllCollapsed = 0;
 
+  int visibleCount = 0;
+
+  // 1. Calculate required space ONLY for visible sections
   for (auto sec : std::as_const(m_sections)) {
+    if (sec->isHidden()) {
+      continue;
+    }
+
     wAllNormal += sec->estimateWidth(RibbonSection::Normal);
     wAllCompact += sec->estimateWidth(RibbonSection::Compact);
     wAllCollapsed += sec->estimateWidth(RibbonSection::Collapsed);
+    visibleCount++;
   }
-  int sepWidth = m_sections.size() * 5;
+
+  // Calculate separators between visible sections
+  const int sepWidth = visibleCount > 0 ? ((visibleCount - 1) * 5) : 0;
   wAllNormal += sepWidth;
   wAllCompact += sepWidth;
   wAllCollapsed += sepWidth;
 
+  // 2. Apply modes based on true available width
   if (availableWidth >= wAllNormal) {
     for (auto sec : std::as_const(m_sections)) {
-      sec->setMode(RibbonSection::Normal);
+      if (!sec->isHidden()) {
+        sec->setMode(RibbonSection::Normal);
+      }
     }
   } else if (availableWidth >= wAllCompact) {
     for (auto sec : std::as_const(m_sections)) {
-      sec->setMode(RibbonSection::Compact);
+      if (!sec->isHidden()) {
+        sec->setMode(RibbonSection::Compact);
+      }
     }
   } else {
+    // 3. Fallback: collapse from right to left if still out of space
     int currentW = wAllCompact;
     QVector<RibbonSection::Mode> modes(m_sections.size(), RibbonSection::Compact);
 
     for (int i = m_sections.size() - 1; i >= 0; --i) {
+      if (m_sections[i]->isHidden()) {
+        continue;
+      }
+
       if (currentW <= availableWidth) {
         break;
       }
 
-      int compactW = m_sections[i]->estimateWidth(RibbonSection::Compact);
-      int collapsedW = m_sections[i]->estimateWidth(RibbonSection::Collapsed);
+      const int compactW = m_sections[i]->estimateWidth(RibbonSection::Compact);
+      const int collapsedW = m_sections[i]->estimateWidth(RibbonSection::Collapsed);
 
       currentW = currentW - compactW + collapsedW;
       modes[i] = RibbonSection::Collapsed;
     }
 
     for (int i = 0; i < m_sections.size(); ++i) {
-      m_sections[i]->setMode(modes[i]);
+      if (!m_sections[i]->isHidden()) {
+        m_sections[i]->setMode(modes[i]);
+      }
     }
   }
 }

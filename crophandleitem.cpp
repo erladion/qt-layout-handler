@@ -15,8 +15,8 @@ CropHandleItem::CropHandleItem(HandlePosition pos, QGraphicsItem* parent) : QGra
     // --> CHANGED: Make it wider (80px instead of 30px) to fit the text
     setRect(0, 0, 80, 30);
     setBrush(QBrush(QColor(0x4CAF50)));  // A nicer Material Design green
-    setPen(Qt::NoPen);                    // Remove the black border for a cleaner look
-    setCursor(Qt::PointingHandCursor);    // Add a hand cursor so it feels like a button
+    setPen(Qt::NoPen);                   // Remove the black border for a cleaner look
+    setCursor(Qt::PointingHandCursor);   // Add a hand cursor so it feels like a button
   } else {
     if (pos == TopLeft || pos == BottomRight)
       setCursor(Qt::SizeFDiagCursor);
@@ -56,6 +56,7 @@ void CropHandleItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
 
   // 2. Draw our custom UI on top if it is the Apply Button
   if (m_position == ApplyButton) {
+    painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
 
     // -- Draw the Checkmark --
@@ -81,5 +82,6 @@ void CropHandleItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
 
     // Draw the text vertically centered
     painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, "Apply");
+    painter->restore();
   }
 }

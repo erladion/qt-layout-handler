@@ -2,6 +2,7 @@
 #define OFFICETOOLBAR_H
 
 #include <QAction>
+#include <QEvent>
 #include <QList>
 #include <QToolButton>
 #include <QWidget>
@@ -93,6 +94,8 @@ public:
 protected:
   void resizeEvent(QResizeEvent* event) override;
   void paintEvent(QPaintEvent* event) override;
+
+  bool event(QEvent* e) override;
 
 private:
   void layoutSections();
