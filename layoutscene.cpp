@@ -137,7 +137,6 @@ LayoutScene::LayoutScene(qreal x, qreal y, qreal w, qreal h, QObject* parent)
   connect(&m_gridWatcher, &QFutureWatcher<QVector<QLineF>>::finished, this, &LayoutScene::onGridCalculationFinished);
 
   connect(&m_laserTimer, &QTimer::timeout, this, &LayoutScene::fadeLaserTrail);
-  m_laserTimer.start(16);
 }
 
 bool LayoutScene::isGridEnabled() const {
@@ -403,8 +402,16 @@ void LayoutScene::distributeSelectionV() {
 
 void LayoutScene::setLaserActive(bool active) {
   m_laserActive = active;
-  if (!active)
+  // The timer only needs to run while the laser is active (to animate the
+  // trail fade); otherwise it would be idle work for the scene's whole life.
+  if (active) {
+    if (!m_laserTimer.isActive()) {
+      m_laserTimer.start(16);
+    }
+  } else {
     m_laserTrail.clear();
+    m_laserTimer.stop();
+  }
   invalidate(sceneRect(), QGraphicsScene::ForegroundLayer);
 }
 
