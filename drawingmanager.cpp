@@ -127,14 +127,32 @@ bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
       return true;
     } else if (event->type() == QEvent::MouseButtonRelease && mouseEvent->button() == Qt::LeftButton) {
       if (m_activeDrawItem) {
-        m_activeDrawItem = nullptr;
-
-        // --- NEW: A new action invalidates the redo history ---
-        for (QGraphicsItem* item : std::as_const(m_undoneItems)) {
-          delete item;
+        QRectF drawnBounds;
+        if (m_currentShape == Shape::Freehand || m_currentShape == Shape::Marker) {
+          drawnBounds = static_cast<QGraphicsPathItem*>(m_activeDrawItem)->path().boundingRect();
+        } else if (m_currentShape == Shape::Rectangle) {
+          drawnBounds = static_cast<QGraphicsRectItem*>(m_activeDrawItem)->rect();
+        } else {
+          drawnBounds = static_cast<QGraphicsEllipseItem*>(m_activeDrawItem)->rect();
         }
-        m_undoneItems.clear();
-        // ------------------------------------------------------
+
+        constexpr qreal minDrawSize = 3.0;
+        if (drawnBounds.width() < minDrawSize && drawnBounds.height() < minDrawSize) {
+          // A click with no real drag — discard the empty shape and keep the
+          // redo history intact, since nothing was actually committed.
+          m_drawnItems.removeOne(m_activeDrawItem);
+          if (m_pScene && m_activeDrawItem->scene() == m_pScene) {
+            m_pScene->removeItem(m_activeDrawItem);
+          }
+          delete m_activeDrawItem;
+        } else {
+          // A committed stroke invalidates the redo history.
+          for (QGraphicsItem* item : std::as_const(m_undoneItems)) {
+            delete item;
+          }
+          m_undoneItems.clear();
+        }
+        m_activeDrawItem = nullptr;
       }
       return true;
     }
