@@ -269,13 +269,6 @@ void MainWindow::newLayout() {
     m_pDrawingManager->setSize(m_drawSize);
     m_pDrawingManager->setShape(static_cast<DrawingManager::Shape>(m_currentShape));
 
-    // Clean up laser setup inside connections
-    connect(m_pBtnClear, &QPushButton::clicked, this, [this]() {
-      if (m_pDrawingManager) {
-        m_pDrawingManager->clearDrawings();
-      }
-    });
-
     connectSceneSignals();
 
     m_pView->setScene(m_pScene);
@@ -564,7 +557,8 @@ void MainWindow::removeWindow() {
   }
 
   for (auto item : std::as_const(selected)) {
-    if (item->type() == Constants::Item::AppItem || item->type() == Constants::Item::ZoneItem || item->type() == Constants::Item::GuideItem) {
+    if (item->type() == Constants::Item::AppItem || item->type() == Constants::Item::ZoneItem || item->type() == Constants::Item::GuideItem ||
+        item->type() == Constants::Item::MirroredAppItem) {
       m_pScene->removeItem(item);
       delete item;
     }
@@ -745,12 +739,9 @@ void MainWindow::loadLayout() {
     m_pScene = new LayoutScene(0, 0, 1920, 1080, this);
     m_pScene->setItemIndexMethod(QGraphicsScene::NoIndex);
     m_pView->setScene(m_pScene);
-    connect(m_pScene, &QGraphicsScene::selectionChanged, this, &MainWindow::onSelectionChanged);
-    connect(m_pScene, &QGraphicsScene::changed, this, &MainWindow::onSceneChanged);
+    connectSceneSignals();
     updateInterfaceState();
   }
-
-  connectSceneSignals();
 
   if (LayoutSerializer::load(m_pScene, fileName)) {
     setModified(false);
@@ -825,10 +816,10 @@ void MainWindow::createFloatingToolbar() {
   mainLayout->addWidget(dragHandle);
 
   // Recreate your original buttons
-  m_pBtnEdit = new QPushButton(QIcon(":/icons/move"), "");
-  m_pBtnDraw = new QPushButton(QIcon(":/icons/draw"), "");
-  m_pBtnLaser = new QPushButton(QIcon(":/icons/laser"), "");
-  m_pBtnClear = new QPushButton(QIcon(":/icons/clear"), "");
+  m_pBtnEdit = new QPushButton(QIcon(":/icons/move.svg"), "");
+  m_pBtnDraw = new QPushButton(QIcon(":/icons/draw.svg"), "");
+  m_pBtnLaser = new QPushButton(QIcon(":/icons/laser.svg"), "");
+  m_pBtnClear = new QPushButton(QIcon(":/icons/clear.svg"), "");
 
   m_pBtnEdit->setFixedSize(24, 24);
   m_pBtnDraw->setFixedSize(24, 24);
@@ -844,6 +835,14 @@ void MainWindow::createFloatingToolbar() {
   mainLayout->addWidget(m_pBtnDraw);
   mainLayout->addWidget(m_pBtnLaser);
   mainLayout->addWidget(m_pBtnClear);
+
+  // Connect once here (not per-layout, which stacks handlers). The drawing
+  // manager is recreated per layout, so guard against it being absent.
+  connect(m_pBtnClear, &QPushButton::clicked, this, [this]() {
+    if (m_pDrawingManager) {
+      m_pDrawingManager->clearDrawings();
+    }
+  });
 
   // Initial position
   m_floatingToolbar->move(20, 20);
@@ -943,8 +942,8 @@ void MainWindow::createFloatingToolbar() {
   drawColorBtn->setFixedSize(20, 20);
   drawColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(m_drawColor.name()));
 
-  QPushButton* undoBtn = new QPushButton(QIcon(":/icons/undo"), "");
-  QPushButton* redoBtn = new QPushButton(QIcon(":/icons/redo"), "");
+  QPushButton* undoBtn = new QPushButton(QIcon(":/icons/undo.svg"), "");
+  QPushButton* redoBtn = new QPushButton(QIcon(":/icons/redo.svg"), "");
 
   undoBtn->setFixedSize(24, 24);
   redoBtn->setFixedSize(24, 24);
@@ -1216,7 +1215,7 @@ void MainWindow::createToolbar() {
   // ==========================================
   // 3. MAIN RIBBON: STOP OUTPUT BUTTON
   // ==========================================
-  QAction* stopProjAct = new QAction(QIcon(":/icons/stop_output"), "Stop Output", this);
+  QAction* stopProjAct = new QAction(QIcon(":/icons/stop_output.svg"), "Stop Output", this);
   // Optional: Give it a shortcut so you can hit a key to instantly kill the output
   stopProjAct->setShortcut(QKeySequence(Qt::Key_Escape));
 
