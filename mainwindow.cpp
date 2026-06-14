@@ -130,17 +130,23 @@ MainWindow::MainWindow(QWidget* parent)
 
   m_selector = new WindowSelector(this);
 
-  connect(m_selector, &WindowSelector::windowSelectedForGStreamer, this, [=](QString captureSource) {
-    // Pass the OS-specific string into the item
-    MirroredAppItem* item = new MirroredAppItem(captureSource);
+  connect(m_selector, &WindowSelector::windowSelectedForGStreamer, this, [this](const QString& captureSource) { addMirroredApp(captureSource); });
+}
 
-    item->initActions();
-    connect(item, &ResizableAppItem::propertiesRequested, this, &MainWindow::showProperties);
+void MainWindow::addMirroredApp(const QString& captureSource) {
+  if (!m_pScene) {
+    return;
+  }
 
-    m_pScene->addItem(item);
-    m_pScene->clearSelection();
-    item->setSelected(true);
-  });
+  // Pass the OS-specific capture string into the item.
+  MirroredAppItem* item = new MirroredAppItem(captureSource);
+
+  item->initActions();
+  connect(item, &ResizableAppItem::propertiesRequested, this, &MainWindow::showProperties);
+
+  m_pScene->addItem(item);
+  m_pScene->clearSelection();
+  item->setSelected(true);
 }
 
 MainWindow::~MainWindow() {
@@ -833,13 +839,37 @@ void MainWindow::createToolbar() {
   QToolButton* addBtn = new RibbonButton(new QAction(QIcon(":/icons/add.svg"), "Add App", this), RibbonButton::Large);
   addBtn->setPopupMode(QToolButton::InstantPopup);
   QMenu* addMenu = new QMenu(addBtn);
-  addMenu->addAction("Browser");
-  addMenu->addAction("Terminal");
-  addMenu->addAction("Music Player");
-  addMenu->addAction("File Manager");
   addMenu->setStyleSheet(controlStyle);
   addBtn->setMenu(addMenu);
-  connect(addMenu, &QMenu::triggered, this, &MainWindow::addApp);
+
+  // Rebuild the list of currently open windows each time the menu opens, so the
+  // user can mirror a live app picked from the list (with its own icon).
+  connect(addMenu, &QMenu::aboutToShow, this, [this, addMenu]() {
+    addMenu->clear();
+
+    const QList<WindowSelector::WindowEntry> windows = m_selector->listWindows();
+    if (windows.isEmpty()) {
+      QAction* none = addMenu->addAction("No open windows found");
+      none->setEnabled(false);
+    } else {
+      for (const WindowSelector::WindowEntry& win : windows) {
+        QAction* act = addMenu->addAction(win.icon, win.title);
+        const QString source = win.captureSource;
+        connect(act, &QAction::triggered, this, [this, source]() { addMirroredApp(source); });
+      }
+    }
+
+    addMenu->addSeparator();
+
+    // Generic placeholders for designing a layout before the real apps are open.
+    QMenu* placeholderMenu = addMenu->addMenu("Placeholder");
+    const QStringList placeholders = {"Browser", "Terminal", "Music Player", "File Manager"};
+    for (const QString& name : placeholders) {
+      QAction* act = placeholderMenu->addAction(name);
+      connect(act, &QAction::triggered, this, [this, act]() { addApp(act); });
+    }
+  });
+
   m_pSectionInsert->addLargeButton((RibbonButton*)addBtn);
 
   QAction* zoneAct = new QAction(QIcon(":/icons/zone.svg"), "Zone", this);

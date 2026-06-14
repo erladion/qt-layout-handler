@@ -87,6 +87,9 @@ private:
   // before the active scene is destroyed so the recorder never dangles.
   void stopOutputRecording();
 
+  // Adds a live window-capture item to the scene for the given GStreamer source.
+  void addMirroredApp(const QString& captureSource);
+
   void connectSceneSignals();
 
   QString getTemplateXml(const QString& name);
