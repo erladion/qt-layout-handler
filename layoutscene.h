@@ -51,6 +51,12 @@ public:
   void setLaserColor(const QColor& color);
   void setLaserSize(int size);
 
+  // Magnifier lens: a circular zoomed view of the scene under the cursor that
+  // renders into both the editor view and the projector output.
+  void setMagnifierActive(bool active);
+  void updateMagnifierPosition(const QPointF& pos);
+  void setMagnifierZoom(double zoom);
+
   void alignSelection(Alignment alignment);
 
 signals:
@@ -95,6 +101,12 @@ private:
   bool m_laserActive = false;
   QColor m_laserColor = Qt::red;
   int m_laserSize = 15;
+
+  bool m_magnifierActive = false;
+  QPointF m_magnifierPos;
+  double m_magnifierZoom = 2.0;
+  qreal m_magnifierRadius = 110.0;  // Lens radius in scene units.
+  bool m_renderingMagnifier = false;  // Guards against recursive drawForeground.
 };
 
 #endif  // LAYOUTSCENE_H

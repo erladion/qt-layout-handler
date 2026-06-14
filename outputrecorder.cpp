@@ -9,6 +9,7 @@
 
 #include <gst/app/gstappsrc.h>
 
+#include "constants.h"
 #include "gstutils.h"
 
 OutputRecorder::OutputRecorder(QObject* parent) : QObject(parent) {
@@ -92,7 +93,12 @@ void OutputRecorder::grabFrame() {
     return;
   }
 
-  m_frameImage.fill(Qt::black);
+  // Match the projector/work-area background so the recording is consistent
+  // with what the second screen shows (the scene's workspace item is skipped in
+  // offscreen renders).
+  QColor bg = QColor::fromRgba(Constants::Color::WorkspaceFill);
+  bg.setAlpha(255);
+  m_frameImage.fill(bg);
   QPainter painter(&m_frameImage);
   painter.setRenderHint(QPainter::Antialiasing, true);
   painter.setRenderHint(QPainter::SmoothPixmapTransform, true);

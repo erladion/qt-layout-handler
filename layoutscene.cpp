@@ -5,8 +5,10 @@
 #include "snappingutils.h"
 
 #include <QGraphicsRectItem>
+#include <QImage>
 #include <QLineF>
 #include <QPainter>
+#include <QPainterPath>
 #include <QVector>
 #include <QtConcurrent/QtConcurrent>
 #include <algorithm>
@@ -323,6 +325,79 @@ void LayoutScene::drawForeground(QPainter* painter, const QRectF& rect) {
     }
     painter->restore();
   }
+
+  // 3. Draw Magnifier Lens. The guard stops the nested render() below from
+  // re-entering this block (which would recurse infinitely).
+  if (m_magnifierActive && !m_renderingMagnifier) {
+    const qreal r = m_magnifierRadius;
+    const QPointF center = m_magnifierPos;
+    const QRectF lensRect(center.x() - r, center.y() - r, r * 2.0, r * 2.0);
+
+    // The (smaller) scene region that gets blown up to fill the lens.
+    const qreal srcHalf = r / m_magnifierZoom;
+    const QRectF sourceRect(center.x() - srcHalf, center.y() - srcHalf, srcHalf * 2.0, srcHalf * 2.0);
+
+    // Render that region into an offscreen image, magnified to the lens size.
+    // The workspace background item skips painting in offscreen renders (widget
+    // == nullptr), so seed the lens with an opaque fill; otherwise the original
+    // 1x image shows through the transparent areas as a ghosted double image.
+    const int px = qMax(2, qRound(r * 2.0));
+    QImage lens(px, px, QImage::Format_ARGB32_Premultiplied);
+    QColor lensBg = QColor::fromRgba(Constants::Color::WorkspaceFill);
+    lensBg.setAlpha(255);
+    lens.fill(lensBg);
+    {
+      QPainter lensPainter(&lens);
+      lensPainter.setRenderHint(QPainter::Antialiasing);
+      lensPainter.setRenderHint(QPainter::SmoothPixmapTransform);
+      m_renderingMagnifier = true;
+      render(&lensPainter, QRectF(0, 0, px, px), sourceRect, Qt::IgnoreAspectRatio);
+      m_renderingMagnifier = false;
+    }
+
+    // Mask the content to an antialiased circle by applying a soft circular
+    // alpha mask to the image itself. setClipPath produces a hard (aliased)
+    // clip in the raster engine, which would leave the lens edge jagged.
+    {
+      QPainter maskPainter(&lens);
+      maskPainter.setRenderHint(QPainter::Antialiasing, true);
+      maskPainter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+      maskPainter.setPen(Qt::NoPen);
+      maskPainter.setBrush(Qt::black);
+      maskPainter.drawEllipse(QRectF(0, 0, px, px));
+    }
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    painter->setRenderHint(QPainter::SmoothPixmapTransform);
+
+    painter->drawImage(lensRect, lens);
+
+    // Lens rim: a dark outer ring with a thin light inner edge.
+    painter->setBrush(Qt::NoBrush);
+    painter->setPen(QPen(QColor(20, 20, 20, 210), 3.0));
+    painter->drawEllipse(lensRect);
+    painter->setPen(QPen(QColor(255, 255, 255, 180), 1.0));
+    painter->drawEllipse(lensRect.adjusted(2, 2, -2, -2));
+
+    // Center crosshair, drawn as a white halo under a dark line so it stays
+    // visible over any content. A small gap keeps the exact center point clear.
+    const qreal arm = 9.0;
+    const qreal gap = 2.5;
+    auto drawCrosshair = [&](const QColor& color, qreal width) {
+      QPen pen(color, width);
+      pen.setCapStyle(Qt::FlatCap);
+      painter->setPen(pen);
+      painter->drawLine(QPointF(center.x() - arm, center.y()), QPointF(center.x() - gap, center.y()));
+      painter->drawLine(QPointF(center.x() + gap, center.y()), QPointF(center.x() + arm, center.y()));
+      painter->drawLine(QPointF(center.x(), center.y() - arm), QPointF(center.x(), center.y() - gap));
+      painter->drawLine(QPointF(center.x(), center.y() + gap), QPointF(center.x(), center.y() + arm));
+    };
+    drawCrosshair(QColor(255, 255, 255, 200), 2.6);
+    drawCrosshair(QColor(20, 20, 20, 220), 1.0);
+
+    painter->restore();
+  }
 }
 
 void LayoutScene::clearLayout() {
@@ -449,6 +524,39 @@ void LayoutScene::setLaserColor(const QColor& color) {
 }
 void LayoutScene::setLaserSize(int size) {
   m_laserSize = size;
+}
+
+void LayoutScene::setMagnifierActive(bool active) {
+  if (m_magnifierActive == active) {
+    return;
+  }
+  m_magnifierActive = active;
+
+  const qreal margin = m_magnifierRadius + 4.0;
+  const QRectF lensRect(m_magnifierPos - QPointF(margin, margin), QSizeF(margin * 2, margin * 2));
+  invalidate(lensRect, QGraphicsScene::ForegroundLayer);
+}
+
+void LayoutScene::updateMagnifierPosition(const QPointF& pos) {
+  if (!m_magnifierActive) {
+    return;
+  }
+
+  // Repaint both the lens's old and new footprints (plus the rim margin).
+  const qreal margin = m_magnifierRadius + 4.0;
+  QRectF dirtyRect(m_magnifierPos - QPointF(margin, margin), QSizeF(margin * 2, margin * 2));
+  m_magnifierPos = pos;
+  dirtyRect = dirtyRect.united(QRectF(m_magnifierPos - QPointF(margin, margin), QSizeF(margin * 2, margin * 2)));
+  invalidate(dirtyRect, QGraphicsScene::ForegroundLayer);
+}
+
+void LayoutScene::setMagnifierZoom(double zoom) {
+  m_magnifierZoom = qBound(1.2, zoom, 8.0);
+  if (m_magnifierActive) {
+    const qreal margin = m_magnifierRadius + 4.0;
+    const QRectF lensRect(m_magnifierPos - QPointF(margin, margin), QSizeF(margin * 2, margin * 2));
+    invalidate(lensRect, QGraphicsScene::ForegroundLayer);
+  }
 }
 
 void LayoutScene::alignSelection(Alignment alignment) {

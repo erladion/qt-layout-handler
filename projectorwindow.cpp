@@ -1,10 +1,11 @@
 #include "projectorwindow.h"
 #include <QPainter>
 
+#include "constants.h"
+
 ProjectorWindow::ProjectorWindow(QGraphicsScene* scene, QWidget* parent) : QWidget(parent) {
   setWindowTitle("Layout Output");
   setAttribute(Qt::WA_DeleteOnClose);
-  setAttribute(Qt::WA_TranslucentBackground);
 
   setScene(scene);
 }
@@ -37,9 +38,12 @@ void ProjectorWindow::paintEvent(QPaintEvent* event) {
     return;  // The window is likely shutting down or minimized. Bail out safely.
   }
 
-  painter.setCompositionMode(QPainter::CompositionMode_Source);
-  painter.fillRect(rect(), Qt::transparent);
-  painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+  // Fill the output with the work-area colour so the background (and any
+  // letterbox bars from aspect-fitting) matches the editor instead of being
+  // transparent.
+  QColor bg = QColor::fromRgba(Constants::Color::WorkspaceFill);
+  bg.setAlpha(255);
+  painter.fillRect(rect(), bg);
 
   painter.setRenderHint(QPainter::Antialiasing, false);
   painter.setRenderHint(QPainter::SmoothPixmapTransform, false);

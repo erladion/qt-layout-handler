@@ -45,5 +45,6 @@
         <file>icons/shape-circle.svg</file>
         <file>icons/record.svg</file>
         <file>icons/stop-record.svg</file>
+        <file>icons/magnify.svg</file>
     </qresource>
 </RCC>

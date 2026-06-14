@@ -2,6 +2,7 @@
 
 #include <QButtonGroup>
 #include <QColorDialog>
+#include <QCursor>
 #include <QGraphicsView>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -44,6 +45,11 @@ bool PresenterController::handleViewportEvent(QObject* watched, QEvent* event) {
 
   if (m_currentMode == Mode::Laser && event->type() == QEvent::MouseMove) {
     m_pScene->updateLaserPosition(m_pView->mapToScene(static_cast<QMouseEvent*>(event)->pos()));
+    return true;
+  }
+
+  if (m_currentMode == Mode::Magnify && event->type() == QEvent::MouseMove) {
+    m_pScene->updateMagnifierPosition(m_pView->mapToScene(static_cast<QMouseEvent*>(event)->pos()));
     return true;
   }
 
@@ -118,21 +124,31 @@ void PresenterController::createFloatingToolbar() {
   m_pBtnEdit = new QPushButton(QIcon(":/icons/move.svg"), "");
   m_pBtnDraw = new QPushButton(QIcon(":/icons/draw.svg"), "");
   m_pBtnLaser = new QPushButton(QIcon(":/icons/laser.svg"), "");
+  m_pBtnMagnify = new QPushButton(QIcon(":/icons/magnify.svg"), "");
   m_pBtnClear = new QPushButton(QIcon(":/icons/clear.svg"), "");
+
+  m_pBtnEdit->setToolTip("Move");
+  m_pBtnDraw->setToolTip("Draw");
+  m_pBtnLaser->setToolTip("Laser");
+  m_pBtnMagnify->setToolTip("Magnifier");
+  m_pBtnClear->setToolTip("Clear drawings");
 
   m_pBtnEdit->setFixedSize(24, 24);
   m_pBtnDraw->setFixedSize(24, 24);
   m_pBtnLaser->setFixedSize(24, 24);
+  m_pBtnMagnify->setFixedSize(24, 24);
   m_pBtnClear->setFixedSize(24, 24);
 
   m_pBtnEdit->setCheckable(true);
   m_pBtnDraw->setCheckable(true);
   m_pBtnLaser->setCheckable(true);
+  m_pBtnMagnify->setCheckable(true);
   m_pBtnEdit->setChecked(true);  // Default state
 
   mainLayout->addWidget(m_pBtnEdit);
   mainLayout->addWidget(m_pBtnDraw);
   mainLayout->addWidget(m_pBtnLaser);
+  mainLayout->addWidget(m_pBtnMagnify);
   mainLayout->addWidget(m_pBtnClear);
 
   // The drawing manager is recreated per layout, so guard against it being absent.
@@ -191,6 +207,7 @@ void PresenterController::createFloatingToolbar() {
       m_currentMode = Mode::Laser;
       m_pBtnEdit->setChecked(false);
       m_pBtnDraw->setChecked(false);
+      m_pBtnMagnify->setChecked(false);
       if (m_laserSettingsWidget) {
         m_laserSettingsWidget->show();
         updatePopoutPositions();
@@ -206,7 +223,7 @@ void PresenterController::createFloatingToolbar() {
       if (m_pScene) {
         m_pScene->setLaserActive(false);
       }
-      if (!m_pBtnDraw->isChecked()) {
+      if (!m_pBtnDraw->isChecked() && !m_pBtnMagnify->isChecked()) {
         m_pBtnEdit->setChecked(true);
       }
     }
@@ -341,6 +358,7 @@ void PresenterController::createFloatingToolbar() {
       m_currentMode = Mode::EditLayout;
       m_pBtnDraw->setChecked(false);
       m_pBtnLaser->setChecked(false);
+      m_pBtnMagnify->setChecked(false);
     }
   });
 
@@ -349,6 +367,7 @@ void PresenterController::createFloatingToolbar() {
       m_currentMode = Mode::Draw;
       m_pBtnEdit->setChecked(false);
       m_pBtnLaser->setChecked(false);
+      m_pBtnMagnify->setChecked(false);
 
       if (m_drawSettingsWidget) {
         m_drawSettingsWidget->show();
@@ -360,7 +379,64 @@ void PresenterController::createFloatingToolbar() {
         m_drawSettingsWidget->hide();
       }
       // If the user manually turned the draw tool off, fall back to Edit mode.
-      if (!m_pBtnLaser->isChecked()) {
+      if (!m_pBtnLaser->isChecked() && !m_pBtnMagnify->isChecked()) {
+        m_pBtnEdit->setChecked(true);
+      }
+    }
+  });
+
+  // --- Magnifier settings popout ---
+  m_magnifierSettingsWidget = new QWidget(m_pView->viewport());
+  m_magnifierSettingsWidget->setStyleSheet("background-color: rgba(30, 30, 30, 220); border-radius: 8px; color: white;");
+  m_magnifierSettingsWidget->hide();
+
+  QHBoxLayout* magnifierLayout = new QHBoxLayout(m_magnifierSettingsWidget);
+  magnifierLayout->setContentsMargins(10, 5, 10, 5);
+
+  QLabel* magnifierLbl = new QLabel("Zoom:");
+  QSlider* magnifierSlider = new QSlider(Qt::Horizontal);
+  magnifierSlider->setRange(12, 80);  // Maps to 1.2x .. 8.0x.
+  magnifierSlider->setValue(static_cast<int>(m_magnifierZoom * 10));
+  magnifierSlider->setMinimumWidth(90);
+
+  magnifierLayout->addWidget(magnifierLbl);
+  magnifierLayout->addWidget(magnifierSlider);
+
+  connect(magnifierSlider, &QSlider::valueChanged, this, [this](int val) {
+    m_magnifierZoom = val / 10.0;
+    if (m_pScene) {
+      m_pScene->setMagnifierZoom(m_magnifierZoom);
+    }
+  });
+
+  connect(m_pBtnMagnify, &QPushButton::toggled, this, [this](bool checked) {
+    if (checked) {
+      m_currentMode = Mode::Magnify;
+      m_pBtnEdit->setChecked(false);
+      m_pBtnDraw->setChecked(false);
+      m_pBtnLaser->setChecked(false);
+
+      if (m_magnifierSettingsWidget) {
+        m_magnifierSettingsWidget->show();
+        updatePopoutPositions();
+        m_magnifierSettingsWidget->raise();
+      }
+      if (m_pScene) {
+        m_pScene->setMagnifierZoom(m_magnifierZoom);
+        m_pScene->setMagnifierActive(true);
+        // Seed the lens at the cursor so it doesn't flash at the scene origin
+        // until the first mouse move.
+        const QPoint vpPos = m_pView->viewport()->mapFromGlobal(QCursor::pos());
+        m_pScene->updateMagnifierPosition(m_pView->mapToScene(vpPos));
+      }
+    } else {
+      if (m_magnifierSettingsWidget) {
+        m_magnifierSettingsWidget->hide();
+      }
+      if (m_pScene) {
+        m_pScene->setMagnifierActive(false);
+      }
+      if (!m_pBtnDraw->isChecked() && !m_pBtnLaser->isChecked()) {
         m_pBtnEdit->setChecked(true);
       }
     }
@@ -380,5 +456,8 @@ void PresenterController::updatePopoutPositions() {
   }
   if (m_drawSettingsWidget && m_drawSettingsWidget->isVisible()) {
     m_drawSettingsWidget->move(targetPos);
+  }
+  if (m_magnifierSettingsWidget && m_magnifierSettingsWidget->isVisible()) {
+    m_magnifierSettingsWidget->move(targetPos);
   }
 }

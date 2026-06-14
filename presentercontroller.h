@@ -18,7 +18,7 @@ class QEvent;
 class PresenterController : public QObject {
   Q_OBJECT
 public:
-  enum class Mode { EditLayout, Draw, Laser };
+  enum class Mode { EditLayout, Draw, Laser, Magnify };
 
   explicit PresenterController(QGraphicsView* view, QObject* parent = nullptr);
 
@@ -55,15 +55,18 @@ private:
   int m_laserSize = 15;
   QColor m_drawColor = Qt::blue;
   int m_drawSize = 4;
+  double m_magnifierZoom = 2.0;
 
   QWidget* m_floatingToolbar = nullptr;
   QPushButton* m_pBtnEdit = nullptr;
   QPushButton* m_pBtnDraw = nullptr;
   QPushButton* m_pBtnLaser = nullptr;
+  QPushButton* m_pBtnMagnify = nullptr;
   QPushButton* m_pBtnClear = nullptr;
 
   QWidget* m_laserSettingsWidget = nullptr;
   QWidget* m_drawSettingsWidget = nullptr;
+  QWidget* m_magnifierSettingsWidget = nullptr;
 
   bool m_isDraggingToolbar = false;
   QPoint m_dragOffset;
