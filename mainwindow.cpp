@@ -20,8 +20,11 @@
 #include <QComboBox>
 #include <QDomDocument>
 #include <QFileDialog>
+#include <QGraphicsEllipseItem>
 #include <QGraphicsItemGroup>
+#include <QGraphicsPathItem>
 #include <QGraphicsPixmapItem>
+#include <QGraphicsRectItem>
 #include <QGraphicsView>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -101,6 +104,16 @@ MainWindow::MainWindow(QWidget* parent)
   createToolbar();
   createMenuBar();
   m_pPresenter = new PresenterController(m_pView, this);
+
+  // Escape cancels the active draw/laser tool and returns to the Move tool.
+  QAction* resetToolAct = new QAction(this);
+  resetToolAct->setShortcut(QKeySequence(Qt::Key_Escape));
+  connect(resetToolAct, &QAction::triggered, this, [this]() {
+    if (m_pPresenter) {
+      m_pPresenter->resetToEditMode();
+    }
+  });
+  addAction(resetToolAct);
 
   updateInterfaceState();
   statusBar()->showMessage("No active layout. Create a New Layout (File -> New) to begin.", Constants::StatusMessageDuration);
@@ -529,6 +542,8 @@ void MainWindow::removeWindow() {
         item->type() == Constants::Item::MirroredAppItem) {
       m_pScene->removeItem(item);
       delete item;
+    } else if (item->type() == QGraphicsPathItem::Type || item->type() == QGraphicsRectItem::Type || item->type() == QGraphicsEllipseItem::Type) {
+      m_pPresenter->removeDrawnItem(item);
     }
   }
 }
@@ -903,8 +918,6 @@ void MainWindow::createToolbar() {
   // 3. MAIN RIBBON: STOP OUTPUT BUTTON
   // ==========================================
   QAction* stopProjAct = new QAction(QIcon(":/icons/stop_output.svg"), "Stop Output", this);
-  // Optional: Give it a shortcut so you can hit a key to instantly kill the output
-  stopProjAct->setShortcut(QKeySequence(Qt::Key_Escape));
 
   connect(stopProjAct, &QAction::triggered, this, [this]() {
     if (m_pProjector) {

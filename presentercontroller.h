@@ -30,6 +30,12 @@ public:
   // Routes viewport mouse events for laser/draw mode; returns true if consumed.
   bool handleViewportEvent(QObject* watched, QEvent* event);
 
+  // Cancels the active draw/laser tool and returns to the Move (Edit) tool.
+  void resetToEditMode();
+
+  // Deletes a drawn item if it belongs to the drawing manager; returns true if so.
+  bool removeDrawnItem(QGraphicsItem* item);
+
 protected:
   // Handles dragging of the floating toolbar (installed on it as a filter).
   bool eventFilter(QObject* watched, QEvent* event) override;

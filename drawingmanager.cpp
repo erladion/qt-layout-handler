@@ -59,6 +59,20 @@ void DrawingManager::clearDrawings() {
   }
 }
 
+bool DrawingManager::removeItem(QGraphicsItem* item) {
+  if (m_drawnItems.removeOne(item) || m_undoneItems.removeOne(item)) {
+    if (item == m_activeDrawItem) {
+      m_activeDrawItem = nullptr;
+    }
+    if (m_pScene && item->scene() == m_pScene) {
+      m_pScene->removeItem(item);
+    }
+    delete item;
+    return true;
+  }
+  return false;
+}
+
 bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
   if (!m_pScene) {
     return false;

@@ -30,6 +30,10 @@ public:
 
   void clearDrawings();
 
+  // Removes a single drawn item (e.g. via Delete). Returns true if the item
+  // belonged to this manager.
+  bool removeItem(QGraphicsItem* item);
+
   void undo();
   void redo();
   bool canUndo() const;

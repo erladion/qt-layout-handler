@@ -56,6 +56,18 @@ bool PresenterController::handleViewportEvent(QObject* watched, QEvent* event) {
   return false;
 }
 
+void PresenterController::resetToEditMode() {
+  // Checking the Edit button drives its toggle handler, which switches the mode
+  // and hides the draw/laser popouts.
+  if (m_pBtnEdit) {
+    m_pBtnEdit->setChecked(true);
+  }
+}
+
+bool PresenterController::removeDrawnItem(QGraphicsItem* item) {
+  return m_pDrawingManager && m_pDrawingManager->removeItem(item);
+}
+
 bool PresenterController::eventFilter(QObject* watched, QEvent* event) {
   if (watched == m_floatingToolbar) {
     if (event->type() == QEvent::MouseButtonPress && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
