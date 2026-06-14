@@ -310,6 +310,10 @@ OfficeToolbar::OfficeToolbar(QWidget* parent) : QWidget(parent) {
   m_pLayout->setSpacing(0);
   m_pLayout->setAlignment(Qt::AlignLeft);
   setFixedHeight(Constants::RibbonHeight);
+  // Fill the toolbar's full width so layoutSections() measures the real
+  // available space; otherwise it sizes to its content and collapses sections
+  // as soon as the contextual Format section appears.
+  setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 }
 
 QSize OfficeToolbar::minimumSizeHint() const {
@@ -364,7 +368,14 @@ bool OfficeToolbar::event(QEvent* e) {
 }
 
 void OfficeToolbar::layoutSections() {
+  // Budget against the toolbar's full width, not our own. The ribbon can be
+  // sized to its content (QToolBar doesn't always honor an expanding policy),
+  // so width() understates the real space — especially right when the
+  // contextual Format section appears and we haven't been re-stretched yet.
   int availableWidth = width();
+  if (QWidget* toolbar = parentWidget()) {
+    availableWidth = qMax(availableWidth, toolbar->width());
+  }
   int wAllNormal = 0;
   int wAllCompact = 0;
   int wAllCollapsed = 0;
