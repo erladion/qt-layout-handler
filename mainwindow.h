@@ -24,6 +24,7 @@ class ProjectorWindow;
 class WindowSelector;
 class PresenterController;
 class FormatPanel;
+class OutputRecorder;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -82,6 +83,10 @@ private:
   bool maybeSave();
   void setModified(bool modified);
 
+  // Stops output recording (if active) and resets the Record button. Called
+  // before the active scene is destroyed so the recorder never dangles.
+  void stopOutputRecording();
+
   void connectSceneSignals();
 
   QString getTemplateXml(const QString& name);
@@ -125,6 +130,9 @@ private:
   bool m_isSelectingWindow = false;
 
   FormatPanel* m_pFormatPanel = nullptr;
+
+  OutputRecorder* m_pOutputRecorder = nullptr;
+  QAction* m_pRecordAction = nullptr;
 };
 
 #endif  // MAINWINDOW_H

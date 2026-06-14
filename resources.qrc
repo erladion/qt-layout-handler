@@ -43,5 +43,7 @@
         <file>icons/shape-arrow.svg</file>
         <file>icons/shape-rectangle.svg</file>
         <file>icons/shape-circle.svg</file>
+        <file>icons/record.svg</file>
+        <file>icons/stop-record.svg</file>
     </qresource>
 </RCC>

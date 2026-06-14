@@ -85,6 +85,8 @@ set(PROJECT_SOURCES
         draghandlewidget.h draghandlewidget.cpp
         presentercontroller.h presentercontroller.cpp
         formatpanel.h formatpanel.cpp
+        outputrecorder.h outputrecorder.cpp
+        gstutils.h gstutils.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

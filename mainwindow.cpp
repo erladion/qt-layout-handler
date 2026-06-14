@@ -51,6 +51,7 @@
 
 #include "formatpanel.h"
 #include "presentercontroller.h"
+#include "outputrecorder.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), m_pScene(nullptr), m_pToolbar(nullptr), m_pTopBarSpin(nullptr), m_pBotBarSpin(nullptr), m_isModified(false) {
@@ -104,6 +105,7 @@ MainWindow::MainWindow(QWidget* parent)
   createToolbar();
   createMenuBar();
   m_pPresenter = new PresenterController(m_pView, this);
+  m_pOutputRecorder = new OutputRecorder(this);
 
   // Escape cancels the active draw/laser tool and returns to the Move tool.
   QAction* resetToolAct = new QAction(this);
@@ -263,6 +265,17 @@ void MainWindow::toggleFullScreen() {
   }
 }
 
+void MainWindow::stopOutputRecording() {
+  if (m_pOutputRecorder && m_pOutputRecorder->isRecording()) {
+    m_pOutputRecorder->stop();
+    if (m_pRecordAction) {
+      m_pRecordAction->setIcon(QIcon(":/icons/record.svg"));
+      m_pRecordAction->setText("Record Output");
+    }
+    statusBar()->showMessage("Recording stopped.", Constants::StatusMessageDuration);
+  }
+}
+
 void MainWindow::newLayout() {
   if (!maybeSave()) {
     return;
@@ -271,6 +284,7 @@ void MainWindow::newLayout() {
   NewLayoutDialog dlg(this);
   if (dlg.exec() == QDialog::Accepted) {
     if (m_pScene) {
+      stopOutputRecording();
       m_pScene->deleteLater();
     }
 
@@ -322,6 +336,8 @@ void MainWindow::closeLayout() {
   if (!m_pScene) {
     return;
   }
+
+  stopOutputRecording();
 
   m_pView->setScene(m_pEmptyScene);
 
@@ -931,9 +947,48 @@ void MainWindow::createToolbar() {
 
   m_pSectionInsert->addLargeButton(new RibbonButton(stopProjAct, RibbonButton::Large));
 
+  // ==========================================
+  // 4. MAIN RIBBON: RECORD OUTPUT BUTTON
+  // ==========================================
+  m_pRecordAction = new QAction(QIcon(":/icons/record.svg"), "Record Output", this);
+
+  connect(m_pRecordAction, &QAction::triggered, this, [this]() {
+    if (!m_pOutputRecorder) {
+      return;
+    }
+
+    if (m_pOutputRecorder->isRecording()) {
+      m_pOutputRecorder->stop();
+      m_pRecordAction->setIcon(QIcon(":/icons/record.svg"));
+      m_pRecordAction->setText("Record Output");
+      statusBar()->showMessage("Recording stopped.", Constants::StatusMessageDuration);
+      return;
+    }
+
+    if (!m_pScene) {
+      statusBar()->showMessage("Create or open a layout before recording.", Constants::StatusMessageDuration);
+      return;
+    }
+
+    const QString fileName = QFileDialog::getSaveFileName(this, "Record Output To", "", "Video (*.mkv)", nullptr, QFileDialog::DontUseNativeDialog);
+    if (fileName.isEmpty()) {
+      return;
+    }
+
+    if (m_pOutputRecorder->start(m_pScene, fileName)) {
+      m_pRecordAction->setIcon(QIcon(":/icons/stop-record.svg"));
+      m_pRecordAction->setText("Stop Recording");
+      statusBar()->showMessage("Recording output...", Constants::StatusMessageDuration);
+    } else {
+      statusBar()->showMessage("Failed to start recording.", Constants::StatusMessageDuration);
+    }
+  });
+
+  m_pSectionInsert->addLargeButton(new RibbonButton(m_pRecordAction, RibbonButton::Large));
+
   QAction* wallAct = new QAction(QIcon(":/icons/image.svg"), "Wallpaper", this);
   connect(wallAct, &QAction::triggered, this, &MainWindow::setWallpaper);
-  m_pSectionInsert->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 6);
+  m_pSectionInsert->addWidget(new RibbonButton(wallAct, RibbonButton::Small), 0, 7);
 
   QToolButton* tempBtn = new RibbonButton(new QAction(QIcon(":/icons/template.svg"), "Templates", this), RibbonButton::Small);
   tempBtn->setPopupMode(QToolButton::InstantPopup);
@@ -943,7 +998,7 @@ void MainWindow::createToolbar() {
   tempMenu->setStyleSheet(controlStyle);
   tempBtn->setMenu(tempMenu);
   connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
-  m_pSectionInsert->addWidget(tempBtn, 1, 6);
+  m_pSectionInsert->addWidget(tempBtn, 1, 7);
 
   // --- SECTION: ARRANGE ---
   m_pSectionArrange = ribbon->addSection("Arrange", QIcon(":/icons/section-arrange.svg"));

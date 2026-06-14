@@ -11,6 +11,7 @@
 #include <gst/gst.h>
 
 #include "crophandleitem.h"
+#include "gstutils.h"
 
 MirroredAppItem::MirroredAppItem(const QString& captureSource) : ResizableAppItem("", QRectF(0, 0, 800, 600)), m_captureSource(captureSource) {
   setCacheMode(QGraphicsItem::NoCache);
@@ -87,27 +88,6 @@ MirroredAppItem::~MirroredAppItem() {
       qDebug() << "Pipeline teardown complete in background.";
     }).detach();
   }
-}
-
-// Pick the best available H.264 encoder so recording works on any GPU
-// (NVIDIA / VA-API / software) instead of assuming NVENC is installed.
-static QString selectH264Encoder() {
-  struct EncoderChoice {
-    const char* factory;
-    const char* pipeline;
-  };
-  static const EncoderChoice choices[] = {
-      {"nvh264enc", "nvh264enc zerolatency=true"},
-      {"vah264enc", "vah264enc"},
-      {"x264enc", "x264enc tune=zerolatency speed-preset=ultrafast"},
-  };
-  for (const auto& choice : choices) {
-    if (GstElementFactory* factory = gst_element_factory_find(choice.factory)) {
-      gst_object_unref(factory);
-      return QString::fromLatin1(choice.pipeline);
-    }
-  }
-  return QStringLiteral("x264enc tune=zerolatency speed-preset=ultrafast");
 }
 
 QString MirroredAppItem::generatePipelineString() {
