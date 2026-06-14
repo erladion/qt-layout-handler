@@ -1,7 +1,7 @@
 #include "presentercontroller.h"
 
+#include <QButtonGroup>
 #include <QColorDialog>
-#include <QComboBox>
 #include <QGraphicsView>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -221,16 +221,55 @@ void PresenterController::createFloatingToolbar() {
   drawLayout->setContentsMargins(10, 5, 10, 5);
   drawLayout->setSpacing(8);
 
-  QComboBox* shapeCombo = new QComboBox();
-  shapeCombo->setStyleSheet("background-color: #333; color: white; border: none; padding: 2px;");
-  shapeCombo->addItem("Freehand", QVariant::fromValue(DrawingManager::Shape::Freehand));
-  shapeCombo->addItem("Marker", QVariant::fromValue(DrawingManager::Shape::Marker));
-  shapeCombo->addItem("Rectangle", QVariant::fromValue(DrawingManager::Shape::Rectangle));
-  shapeCombo->addItem("Circle", QVariant::fromValue(DrawingManager::Shape::Ellipse));
+  // Shape tools — a vertical list of one-click buttons (replaces the dropdown).
+  struct ShapeTool {
+    const char* label;
+    const char* icon;
+    DrawingManager::Shape shape;
+  };
+  const ShapeTool shapeTools[] = {
+      {"Freehand", ":/icons/shape-freehand.svg", DrawingManager::Shape::Freehand},
+      {"Marker", ":/icons/shape-marker.svg", DrawingManager::Shape::Marker},
+      {"Arrow", ":/icons/shape-arrow.svg", DrawingManager::Shape::Arrow},
+      {"Rectangle", ":/icons/shape-rectangle.svg", DrawingManager::Shape::Rectangle},
+      {"Circle", ":/icons/shape-circle.svg", DrawingManager::Shape::Ellipse},
+  };
+
+  const QString shapeBtnStyle =
+      "QPushButton { background: transparent; border: 1px solid #555; border-radius: 3px; padding: 3px; }"
+      "QPushButton:hover { background: rgba(255, 255, 255, 20); }"
+      "QPushButton:checked { background: #E53935; border: 1px solid #ff5252; }";
+
+  QButtonGroup* shapeGroup = new QButtonGroup(m_drawSettingsWidget);  // exclusive by default
+  QVBoxLayout* shapeLayout = new QVBoxLayout();
+  shapeLayout->setSpacing(2);
+
+  for (const ShapeTool& tool : shapeTools) {
+    QPushButton* shapeBtn = new QPushButton(QIcon(tool.icon), "");
+    shapeBtn->setToolTip(tool.label);
+    shapeBtn->setIconSize(QSize(18, 18));
+    shapeBtn->setFixedSize(30, 30);
+    shapeBtn->setCheckable(true);
+    shapeBtn->setStyleSheet(shapeBtnStyle);
+    if (tool.shape == m_currentShape) {
+      shapeBtn->setChecked(true);
+    }
+    shapeGroup->addButton(shapeBtn);
+    shapeLayout->addWidget(shapeBtn);
+
+    const DrawingManager::Shape shape = tool.shape;
+    connect(shapeBtn, &QPushButton::clicked, this, [this, shape]() {
+      m_currentShape = shape;
+      if (m_pDrawingManager) {
+        m_pDrawingManager->setShape(shape);
+      }
+    });
+  }
 
   QSlider* drawSlider = new QSlider(Qt::Horizontal);
   drawSlider->setRange(1, 30);
   drawSlider->setValue(m_drawSize);
+  drawSlider->setMinimumWidth(90);
 
   QPushButton* drawColorBtn = new QPushButton();
   drawColorBtn->setFixedSize(20, 20);
@@ -250,17 +289,21 @@ void PresenterController::createFloatingToolbar() {
   undoBtn->setStyleSheet(btnStyle);
   redoBtn->setStyleSheet(btnStyle);
 
-  QHBoxLayout* drawSettingsLayout = new QHBoxLayout();
-  drawSettingsLayout->addWidget(shapeCombo);
+  QVBoxLayout* drawSettingsLayout = new QVBoxLayout();
   drawSettingsLayout->addWidget(drawSlider);
-  drawSettingsLayout->addWidget(drawColorBtn);
+  drawSettingsLayout->addWidget(drawColorBtn, 0, Qt::AlignLeft);
+  drawSettingsLayout->addStretch();
 
   QHBoxLayout* undoRedoLayout = new QHBoxLayout();
   undoRedoLayout->addWidget(undoBtn);
   undoRedoLayout->addWidget(redoBtn);
   undoRedoLayout->addStretch();
 
-  drawLayout->addLayout(drawSettingsLayout);
+  QHBoxLayout* topRow = new QHBoxLayout();
+  topRow->addLayout(shapeLayout);
+  topRow->addLayout(drawSettingsLayout);
+
+  drawLayout->addLayout(topRow);
   drawLayout->addLayout(undoRedoLayout);
 
   connect(undoBtn, &QPushButton::clicked, this, [this]() {
@@ -272,13 +315,6 @@ void PresenterController::createFloatingToolbar() {
   connect(redoBtn, &QPushButton::clicked, this, [this]() {
     if (m_pDrawingManager) {
       m_pDrawingManager->redo();
-    }
-  });
-
-  connect(shapeCombo, &QComboBox::currentIndexChanged, this, [this, shapeCombo](int index) {
-    m_currentShape = shapeCombo->itemData(index).value<DrawingManager::Shape>();
-    if (m_pDrawingManager) {
-      m_pDrawingManager->setShape(m_currentShape);
     }
   });
 

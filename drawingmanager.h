@@ -17,7 +17,7 @@ class QEvent;
 class DrawingManager : public QObject {
   Q_OBJECT
 public:
-  enum class Shape { Freehand, Marker, Rectangle, Ellipse };
+  enum class Shape { Freehand, Marker, Rectangle, Ellipse, Arrow };
 
   explicit DrawingManager(QGraphicsScene* scene, QObject* parent = nullptr);
   ~DrawingManager();

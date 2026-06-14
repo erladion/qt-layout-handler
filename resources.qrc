@@ -38,5 +38,10 @@
         <file>icons/stop_output.svg</file>
         <file>icons/redo.svg</file>
         <file>icons/undo.svg</file>
+        <file>icons/shape-freehand.svg</file>
+        <file>icons/shape-marker.svg</file>
+        <file>icons/shape-arrow.svg</file>
+        <file>icons/shape-rectangle.svg</file>
+        <file>icons/shape-circle.svg</file>
     </qresource>
 </RCC>

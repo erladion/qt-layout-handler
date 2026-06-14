@@ -6,6 +6,7 @@
 #include <QGraphicsView>
 #include <QMouseEvent>
 #include <QPen>
+#include <QtMath>
 
 DrawingManager::DrawingManager(QGraphicsScene* scene, QObject* parent)
     : QObject(parent), m_pScene(scene), m_drawingLayer(new QGraphicsPathItem()), m_activeDrawItem(nullptr), m_currentShape(Shape::Freehand),
@@ -73,6 +74,22 @@ bool DrawingManager::removeItem(QGraphicsItem* item) {
   return false;
 }
 
+// Builds an arrow: a shaft from start to end plus an open "V" arrowhead at end.
+static QPainterPath makeArrowPath(const QPointF& start, const QPointF& end, double headLen) {
+  QPainterPath path;
+  path.moveTo(start);
+  path.lineTo(end);
+
+  const double angle = qAtan2(end.y() - start.y(), end.x() - start.x());
+  const double headAngle = M_PI / 7.0;  // ~26 degrees off the shaft
+  const QPointF wing1(qCos(angle - headAngle), qSin(angle - headAngle));
+  const QPointF wing2(qCos(angle + headAngle), qSin(angle + headAngle));
+  path.moveTo(end - wing1 * headLen);
+  path.lineTo(end);
+  path.lineTo(end - wing2 * headLen);
+  return path;
+}
+
 bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
   if (!m_pScene) {
     return false;
@@ -87,7 +104,7 @@ bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
       QPen drawPen(m_drawColor, m_drawSize, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
 
       QAbstractGraphicsShapeItem* item = nullptr;
-      if (m_currentShape == Shape::Freehand || m_currentShape == Shape::Marker) {
+      if (m_currentShape == Shape::Freehand || m_currentShape == Shape::Marker || m_currentShape == Shape::Arrow) {
         if (m_currentShape == Shape::Marker) {
           QColor markerColor = m_drawColor;
           markerColor.setAlpha(90);
@@ -130,6 +147,9 @@ bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
         if (m_currentShape == Shape::Freehand || m_currentShape == Shape::Marker) {
           m_currentPath.lineTo(scenePos);
           static_cast<QGraphicsPathItem*>(m_activeDrawItem)->setPath(m_currentPath);
+        } else if (m_currentShape == Shape::Arrow) {
+          const double headLen = qMax(14.0, 3.0 * m_drawSize);
+          static_cast<QGraphicsPathItem*>(m_activeDrawItem)->setPath(makeArrowPath(m_drawStartPos, scenePos, headLen));
         } else if (m_currentShape == Shape::Rectangle) {
           QRectF newRect = QRectF(m_drawStartPos, scenePos).normalized();
           static_cast<QGraphicsRectItem*>(m_activeDrawItem)->setRect(newRect);
@@ -142,7 +162,7 @@ bool DrawingManager::handleViewportEvent(QEvent* event, QGraphicsView* view) {
     } else if (event->type() == QEvent::MouseButtonRelease && mouseEvent->button() == Qt::LeftButton) {
       if (m_activeDrawItem) {
         QRectF drawnBounds;
-        if (m_currentShape == Shape::Freehand || m_currentShape == Shape::Marker) {
+        if (m_currentShape == Shape::Freehand || m_currentShape == Shape::Marker || m_currentShape == Shape::Arrow) {
           drawnBounds = static_cast<QGraphicsPathItem*>(m_activeDrawItem)->path().boundingRect();
         } else if (m_currentShape == Shape::Rectangle) {
           drawnBounds = static_cast<QGraphicsRectItem*>(m_activeDrawItem)->rect();
