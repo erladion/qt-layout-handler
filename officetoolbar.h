@@ -99,10 +99,12 @@ protected:
 
 private:
   void layoutSections();
+  void scheduleLayoutUpdate();
 
   QHBoxLayout* m_pLayout;
   QList<RibbonSection*> m_sections;
   int m_lastVisibleCount = -1;
+  bool m_layoutPending = false;
 };
 
 #endif  // OFFICETOOLBAR_H

@@ -334,8 +334,21 @@ void OfficeToolbar::addSpacer() {
 }
 
 void OfficeToolbar::resizeEvent(QResizeEvent* event) {
-  layoutSections();
+  scheduleLayoutUpdate();
   QWidget::resizeEvent(event);
+}
+
+void OfficeToolbar::scheduleLayoutUpdate() {
+  // Coalesce resize/layout requests and run the (expensive) section reflow
+  // asynchronously, so it doesn't block every resize frame.
+  if (m_layoutPending) {
+    return;
+  }
+  m_layoutPending = true;
+  QTimer::singleShot(16, this, [this]() {
+    m_layoutPending = false;
+    layoutSections();
+  });
 }
 
 void OfficeToolbar::paintEvent(QPaintEvent* event) {
@@ -361,7 +374,7 @@ bool OfficeToolbar::event(QEvent* e) {
     }
     if (visibleCount != m_lastVisibleCount) {
       m_lastVisibleCount = visibleCount;
-      QTimer::singleShot(0, this, [this]() { layoutSections(); });
+      scheduleLayoutUpdate();
     }
   }
   return QWidget::event(e);
@@ -372,72 +385,51 @@ void OfficeToolbar::layoutSections() {
   // sized to its content (QToolBar doesn't always honor an expanding policy),
   // so width() understates the real space — especially right when the
   // contextual Format section appears and we haven't been re-stretched yet.
+  // Budget against the toolbar's own width, which is stable per window size.
+  // Using our width() would feed back: expanding a section widens our content,
+  // which resizes us, which re-runs this and expands further — laggy on grow.
   int availableWidth = width();
   if (QWidget* toolbar = parentWidget()) {
-    availableWidth = qMax(availableWidth, toolbar->width());
+    if (toolbar->width() > 0) {
+      availableWidth = toolbar->width();
+    }
   }
-  int wAllNormal = 0;
-  int wAllCompact = 0;
-  int wAllCollapsed = 0;
 
-  int visibleCount = 0;
-
-  // 1. Calculate required space ONLY for visible sections
+  QList<RibbonSection*> visible;
   for (auto sec : std::as_const(m_sections)) {
-    if (sec->isHidden()) {
-      continue;
+    if (!sec->isHidden()) {
+      visible.append(sec);
     }
-
-    wAllNormal += sec->estimateWidth(RibbonSection::Normal);
-    wAllCompact += sec->estimateWidth(RibbonSection::Compact);
-    wAllCollapsed += sec->estimateWidth(RibbonSection::Collapsed);
-    visibleCount++;
+  }
+  if (visible.isEmpty()) {
+    return;
   }
 
-  // Calculate separators between visible sections
-  const int sepWidth = visibleCount > 0 ? ((visibleCount - 1) * 5) : 0;
-  wAllNormal += sepWidth;
-  wAllCompact += sepWidth;
-  wAllCollapsed += sepWidth;
+  QVector<RibbonSection::Mode> modes(visible.size(), RibbonSection::Normal);
 
-  // 2. Apply modes based on true available width
-  if (availableWidth >= wAllNormal) {
-    for (auto sec : std::as_const(m_sections)) {
-      if (!sec->isHidden()) {
-        sec->setMode(RibbonSection::Normal);
-      }
+  auto totalWidth = [&]() {
+    int w = (visible.size() - 1) * 5;  // separators between sections
+    for (int i = 0; i < visible.size(); ++i) {
+      w += visible[i]->estimateWidth(modes[i]);
     }
-  } else if (availableWidth >= wAllCompact) {
-    for (auto sec : std::as_const(m_sections)) {
-      if (!sec->isHidden()) {
-        sec->setMode(RibbonSection::Compact);
-      }
-    }
-  } else {
-    // 3. Fallback: collapse from right to left if still out of space
-    int currentW = wAllCompact;
-    QVector<RibbonSection::Mode> modes(m_sections.size(), RibbonSection::Compact);
+    return w;
+  };
 
-    for (int i = m_sections.size() - 1; i >= 0; --i) {
-      if (m_sections[i]->isHidden()) {
-        continue;
-      }
+  // Office-style progressive reduction: from the right, first shrink groups to
+  // icon-only (Compact), then collapse them to a dropdown button (Collapsed),
+  // stopping the moment everything fits. Left-hand groups stay full longest.
+  for (int i = visible.size() - 1; i >= 0 && totalWidth() > availableWidth; --i) {
+    modes[i] = RibbonSection::Compact;
+  }
+  for (int i = visible.size() - 1; i >= 0 && totalWidth() > availableWidth; --i) {
+    modes[i] = RibbonSection::Collapsed;
+  }
 
-      if (currentW <= availableWidth) {
-        break;
-      }
-
-      const int compactW = m_sections[i]->estimateWidth(RibbonSection::Compact);
-      const int collapsedW = m_sections[i]->estimateWidth(RibbonSection::Collapsed);
-
-      currentW = currentW - compactW + collapsedW;
-      modes[i] = RibbonSection::Collapsed;
-    }
-
-    for (int i = 0; i < m_sections.size(); ++i) {
-      if (!m_sections[i]->isHidden()) {
-        m_sections[i]->setMode(modes[i]);
-      }
+  // setMode() is expensive (re-parents content, re-styles buttons, relayout),
+  // so only apply it where the mode actually changes — resize fires constantly.
+  for (int i = 0; i < visible.size(); ++i) {
+    if (visible[i]->mode() != modes[i]) {
+      visible[i]->setMode(modes[i]);
     }
   }
 }
