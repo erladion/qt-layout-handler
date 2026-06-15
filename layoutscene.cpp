@@ -355,23 +355,26 @@ void LayoutScene::drawForeground(QPainter* painter, const QRectF& rect) {
       m_renderingMagnifier = false;
     }
 
-    // Mask the content to an antialiased circle by applying a soft circular
-    // alpha mask to the image itself. setClipPath produces a hard (aliased)
-    // clip in the raster engine, which would leave the lens edge jagged.
+    // Cut the content into an antialiased circle. Painting the opaque content
+    // as a texture brush inside drawEllipse fills only the ellipse (the corners
+    // stay transparent) with a smooth edge. A DestinationIn drawEllipse would
+    // leave the corners opaque (it never touches pixels outside the ellipse),
+    // and setClipPath produces a hard, aliased edge.
+    QImage circular(px, px, QImage::Format_ARGB32_Premultiplied);
+    circular.fill(Qt::transparent);
     {
-      QPainter maskPainter(&lens);
-      maskPainter.setRenderHint(QPainter::Antialiasing, true);
-      maskPainter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-      maskPainter.setPen(Qt::NoPen);
-      maskPainter.setBrush(Qt::black);
-      maskPainter.drawEllipse(QRectF(0, 0, px, px));
+      QPainter circlePainter(&circular);
+      circlePainter.setRenderHint(QPainter::Antialiasing, true);
+      circlePainter.setPen(Qt::NoPen);
+      circlePainter.setBrush(QBrush(lens));
+      circlePainter.drawEllipse(QRectF(0, 0, px, px));
     }
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
 
-    painter->drawImage(lensRect, lens);
+    painter->drawImage(lensRect, circular);
 
     // Lens rim: a dark outer ring with a thin light inner edge.
     painter->setBrush(Qt::NoBrush);
