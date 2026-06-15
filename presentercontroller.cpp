@@ -82,7 +82,11 @@ bool PresenterController::eventFilter(QObject* watched, QEvent* event) {
       m_dragOffset = static_cast<QMouseEvent*>(event)->pos();
       return true;
     } else if (event->type() == QEvent::MouseMove && m_isDraggingToolbar) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
       QPoint globalMousePos = static_cast<QMouseEvent*>(event)->globalPosition().toPoint();
+#else
+      QPoint globalMousePos = static_cast<QMouseEvent*>(event)->globalPos();
+#endif
       QPoint parentPos = m_pView->viewport()->mapFromGlobal(globalMousePos);
 
       QPoint newPos = parentPos - m_dragOffset;

@@ -405,7 +405,12 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   }
 
   if (event->type() == QEvent::MouseMove) {
-    QPoint viewPos = m_pView->viewport()->mapFromGlobal(static_cast<QMouseEvent*>(event)->globalPosition().toPoint());
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QPoint eventGlobalPos = static_cast<QMouseEvent*>(event)->globalPosition().toPoint();
+#else
+    const QPoint eventGlobalPos = static_cast<QMouseEvent*>(event)->globalPos();
+#endif
+    QPoint viewPos = m_pView->viewport()->mapFromGlobal(eventGlobalPos);
     m_pHRuler->updateCursorPos(viewPos);
     m_pVRuler->updateCursorPos(viewPos);
   }

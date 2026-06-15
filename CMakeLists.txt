@@ -9,8 +9,14 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Xml)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Xml)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets Xml)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Xml)
+
+# QOpenGLWidget is part of the Widgets module on Qt5, but its own OpenGLWidgets
+# module on Qt6 — only request it there.
+if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+    find_package(Qt6 REQUIRED COMPONENTS OpenGLWidgets)
+endif()
 
 if (WIN32)
     # ==========================================
@@ -108,10 +114,14 @@ target_link_libraries(layouteditor PRIVATE
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Widgets
-    Qt${QT_VERSION_MAJOR}::OpenGLWidgets
     Qt${QT_VERSION_MAJOR}::Xml
     ${GST_LIBRARIES}
 )
+
+# QOpenGLWidget ships in its own module on Qt6; on Qt5 it comes with Widgets.
+if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+    target_link_libraries(layouteditor PRIVATE Qt6::OpenGLWidgets)
+endif()
 
 if (UNIX AND NOT APPLE)
     target_link_libraries(layouteditor PRIVATE X11::X11)
