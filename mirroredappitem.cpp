@@ -1,8 +1,10 @@
 #include "mirroredappitem.h"
 
+#include <QActionGroup>
 #include <QApplication>
 #include <QFileDialog>
 #include <QGraphicsScene>
+#include <QMenu>
 #include <QPainter>
 
 #include <thread>
@@ -91,15 +93,24 @@ MirroredAppItem::~MirroredAppItem() {
 }
 
 QString MirroredAppItem::generatePipelineString() {
+  // use-damage is an ximagesrc-only property, so inject the per-item choice
+  // right after the element name (other sources are used as-is).
+  QString source = m_captureSource;
+  if (source.startsWith("ximagesrc")) {
+    source = QString("ximagesrc use-damage=%1 %2")
+                 .arg(m_useDamage ? QStringLiteral("true") : QStringLiteral("false"), source.mid(QStringLiteral("ximagesrc").length()).trimmed());
+  }
+
   // THE FIX: Added videoconvert and videorate right after the source
   QString baseStr =
       QString(
           "%1 ! "
           "videoconvert ! "
           "videorate ! "
-          "video/x-raw,framerate=30/1 ! "
+          "video/x-raw,framerate=%6/1 ! "
           "videocrop name=mycrop top=%2 bottom=%3 left=%4 right=%5 ! ")
-          .arg(m_captureSource, QString::number(m_cropTop), QString::number(m_cropBottom), QString::number(m_cropLeft), QString::number(m_cropRight));
+          .arg(source, QString::number(m_cropTop), QString::number(m_cropBottom), QString::number(m_cropLeft), QString::number(m_cropRight),
+               QString::number(m_captureFramerate));
 
   if (!m_isRecording) {
     return baseStr + "videoconvert ! video/x-raw,format=BGRx ! appsink name=mysink";
@@ -170,6 +181,41 @@ void MirroredAppItem::setupCustomActions() {
   QAction* interactiveCropAction = new QAction("Interactive Crop", this);
   connect(interactiveCropAction, &QAction::triggered, this, [this]() { enterCropMode(); });
   m_pContextMenu.addAction(interactiveCropAction);
+
+  // Per-item capture frame rate. Dropping heavy windows (e.g. VS Code) to a
+  // lower rate reduces the X-server load and repaint cost they impose.
+  QMenu* fpsMenu = m_pContextMenu.addMenu("Capture FPS");
+  QActionGroup* fpsGroup = new QActionGroup(this);
+  fpsGroup->setExclusive(true);
+  const int fpsOptions[] = {5, 10, 15, 24, 30, 60};
+  for (int fps : fpsOptions) {
+    QAction* fpsAction = fpsMenu->addAction(QString("%1 fps").arg(fps));
+    fpsAction->setCheckable(true);
+    fpsAction->setChecked(fps == m_captureFramerate);
+    fpsGroup->addAction(fpsAction);
+    connect(fpsAction, &QAction::triggered, this, [this, fps]() {
+      if (m_captureFramerate == fps) {
+        return;
+      }
+      m_captureFramerate = fps;
+      rebuildPipeline();
+    });
+  }
+
+  // use-damage only exists on X11 ximagesrc captures, so only offer it there.
+  if (m_captureSource.startsWith("ximagesrc")) {
+    QAction* damageAction = new QAction("Use XDamage (lighter, jittery)", this);
+    damageAction->setCheckable(true);
+    damageAction->setChecked(m_useDamage);
+    connect(damageAction, &QAction::toggled, this, [this](bool on) {
+      if (m_useDamage == on) {
+        return;
+      }
+      m_useDamage = on;
+      rebuildPipeline();
+    });
+    m_pContextMenu.addAction(damageAction);
+  }
 }
 
 void MirroredAppItem::enterCropMode() {

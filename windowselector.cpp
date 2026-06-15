@@ -133,10 +133,8 @@ QList<WindowSelector::WindowEntry> WindowSelector::listWindows() {
 
     WindowEntry entry;
     entry.title = title;
-    // use-damage=false grabs the full window each frame instead of relying on
-    // XDamage regions, which is steadier for GPU-composited windows (e.g. VS
-    // Code / Electron) at the cost of a little more CPU on static windows.
-    entry.captureSource = QString("ximagesrc use-damage=false xid=%1").arg(static_cast<qulonglong>(w));
+    // The MirroredAppItem injects the per-item use-damage and frame rate.
+    entry.captureSource = QString("ximagesrc xid=%1").arg(static_cast<qulonglong>(w));
 
     // Icon from _NET_WM_ICON (request up to 4MB to cover large icons).
     if (netWmIcon != None) {
@@ -238,10 +236,9 @@ void WindowSelector::captureWindowUnderCursor() {
 
     qDebug() << "Captured Top-Level Linux XID:" << targetWindow;
 
-    // Build the Linux-specific GStreamer capture element. use-damage=false grabs
-    // the full window each frame instead of XDamage regions: steadier for
-    // GPU-composited windows (VS Code / Electron) and avoids X11 event starvation.
-    QString captureSource = QString("ximagesrc use-damage=false xid=%1").arg(targetWindow);
+    // Build the Linux-specific GStreamer capture element. The MirroredAppItem
+    // injects the per-item use-damage and frame rate when it builds the pipeline.
+    QString captureSource = QString("ximagesrc xid=%1").arg(targetWindow);
     emit windowSelectedForGStreamer(captureSource);
   }
 

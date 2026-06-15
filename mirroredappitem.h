@@ -66,6 +66,14 @@ private:
   bool m_isRecording = false;
   QString m_recordFilename;
 
+  // Per-item capture frame rate. Lower it for heavy (e.g. GPU-composited)
+  // windows to cut X-server load and repaint cost.
+  int m_captureFramerate = 30;
+
+  // ximagesrc use-damage: false grabs the full window each frame (steadier on
+  // GPU-composited windows), true copies only XDamage regions (lighter, jittery).
+  bool m_useDamage = false;
+
   // Crop State
   int m_cropTop = 0;
   int m_cropBottom = 0;
