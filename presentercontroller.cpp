@@ -4,6 +4,7 @@
 #include <QColorDialog>
 #include <QCursor>
 #include <QGraphicsView>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
@@ -306,8 +307,39 @@ void PresenterController::createFloatingToolbar() {
   undoBtn->setStyleSheet(btnStyle);
   redoBtn->setStyleSheet(btnStyle);
 
+  // Applies a chosen draw colour to the state, the drawing manager, and the
+  // custom-colour swatch (so the swatch always mirrors the active colour).
+  auto applyDrawColor = [this, drawColorBtn](const QColor& color) {
+    m_drawColor = color;
+    drawColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(color.name()));
+    if (m_pDrawingManager) {
+      m_pDrawingManager->setColor(color);
+    }
+  };
+
+  // Quick-pick palette (5 x 2): vivid but softened shades (not harsh primaries).
+  // The custom picker below covers anything not in the presets.
+  const char* swatchColors[] = {
+      "#E53935", "#FB8C00", "#FDD835", "#7CB342", "#00897B", "#039BE5", "#1E88E5", "#5E35B1", "#8E24AA", "#D81B60",
+  };
+  QGridLayout* paletteLayout = new QGridLayout();
+  paletteLayout->setSpacing(3);
+  for (int i = 0; i < 10; ++i) {
+    const QColor color(QString::fromLatin1(swatchColors[i]));
+    QPushButton* swatch = new QPushButton();
+    swatch->setFixedSize(18, 18);
+    swatch->setCursor(Qt::PointingHandCursor);
+    swatch->setToolTip(color.name());
+    swatch->setStyleSheet(QString("QPushButton { background-color: %1; border: 1px solid #777; border-radius: 3px; }"
+                                  "QPushButton:hover { border: 1px solid #fff; }")
+                              .arg(color.name()));
+    paletteLayout->addWidget(swatch, i / 5, i % 5);
+    connect(swatch, &QPushButton::clicked, this, [applyDrawColor, color]() { applyDrawColor(color); });
+  }
+
   QVBoxLayout* drawSettingsLayout = new QVBoxLayout();
   drawSettingsLayout->addWidget(drawSlider);
+  drawSettingsLayout->addLayout(paletteLayout);
   drawSettingsLayout->addWidget(drawColorBtn, 0, Qt::AlignLeft);
   drawSettingsLayout->addStretch();
 
@@ -342,14 +374,10 @@ void PresenterController::createFloatingToolbar() {
     }
   });
 
-  connect(drawColorBtn, &QPushButton::clicked, this, [this, drawColorBtn]() {
+  connect(drawColorBtn, &QPushButton::clicked, this, [this, applyDrawColor]() {
     QColor color = QColorDialog::getColor(m_drawColor, m_floatingToolbar, "Draw Color", QColorDialog::DontUseNativeDialog);
     if (color.isValid()) {
-      m_drawColor = color;
-      drawColorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #777; border-radius: 3px;").arg(color.name()));
-      if (m_pDrawingManager) {
-        m_pDrawingManager->setColor(m_drawColor);
-      }
+      applyDrawColor(color);
     }
   });
 
