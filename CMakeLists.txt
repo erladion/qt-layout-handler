@@ -86,12 +86,15 @@ set(PROJECT_SOURCES
         windowselector.h windowselector.cpp
         projectorwindow.h projectorwindow.cpp
         mirroredappitem.h mirroredappitem.cpp
+        capturepipeline.h capturepipeline.cpp
         drawingmanager.h drawingmanager.cpp
         crophandleitem.h crophandleitem.cpp
         draghandlewidget.h draghandlewidget.cpp
         presentercontroller.h presentercontroller.cpp
         formatpanel.h formatpanel.cpp
         outputrecorder.h outputrecorder.cpp
+        outputcontroller.h outputcontroller.cpp
+        capturecontroller.h capturecontroller.cpp
         gstutils.h gstutils.cpp
 )
 

@@ -1,40 +1,36 @@
 #ifndef MIRROREDAPPITEM_H
 #define MIRROREDAPPITEM_H
 
-#include <QImage>
-#include <QMutex>
-#include <QTimer>
+#include <QRectF>
 
 #include "constants.h"
 #include "resizableappitem.h"
 
-#include <gst/gst.h>
-
+class CapturePipeline;
 class CropHandleItem;
 
+// A scene item that mirrors a live window. It owns a CapturePipeline (the
+// GStreamer side) and is responsible only for rendering frames, the interactive
+// crop UI, and the context menu.
 class MirroredAppItem : public ResizableAppItem {
   Q_OBJECT
 public:
   MirroredAppItem(const QString& captureSource);
-  ~MirroredAppItem();
 
   enum { Type = Constants::Item::MirroredAppItem };
   int type() const override { return Type; }
 
   void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
-  // Cropping
+  // Cropping. Values live in the capture pipeline; these forward to it.
   void updateCropValues(int top, int bottom, int left, int right);
-  int cropTop() const { return m_cropTop; }
-  int cropBottom() const { return m_cropBottom; }
-  int cropLeft() const { return m_cropLeft; }
-  int cropRight() const { return m_cropRight; }
+  int cropTop() const;
+  int cropBottom() const;
+  int cropLeft() const;
+  int cropRight() const;
 
   void updateCropHandles(CropHandleItem* movedHandle, int position);
   void applyInteractiveCrop();
-
-signals:
-  void newFrameReceived();
 
 protected:
   void setupCustomActions();
@@ -46,51 +42,12 @@ protected:
   void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
 
 private:
-  void rebuildPipeline();
-  QString generatePipelineString();
-
-  static GstFlowReturn onNewSample(GstElement* sink, gpointer data);
-  static gboolean busCall(GstBus* bus, GstMessage* message, gpointer data);
-
   void enterCropMode();
   void exitCropMode();
 
-private:
-  long m_targetXid;
-  QSize m_sourceSize;
+  CapturePipeline* m_pPipeline = nullptr;
 
-  // GStreamer Pipeline
-  GstElement* m_pipeline = nullptr;
-  guint m_busWatchId = 0;
-
-  bool m_isRecording = false;
-  QString m_recordFilename;
-
-  // Per-item capture frame rate. Lower it for heavy (e.g. GPU-composited)
-  // windows to cut X-server load and repaint cost.
-  int m_captureFramerate = 30;
-
-  // ximagesrc use-damage: false grabs the full window each frame (steadier on
-  // GPU-composited windows), true copies only XDamage regions (lighter, jittery).
-  bool m_useDamage = false;
-
-  // Crop State
-  int m_cropTop = 0;
-  int m_cropBottom = 0;
-  int m_cropLeft = 0;
-  int m_cropRight = 0;
-  QTimer* m_cropThrottleTimer;
-  bool m_cropPending = false;
-
-  // Thread-safe Rendering
-  QImage m_currentFrame;
-  QMutex m_frameMutex;
-  bool m_frameReady = false;
-  QImage m_bufferImage;
-  QSize m_lastFrameSize;  // Streaming-thread only; gates the main-thread resize
-
-  QString m_captureSource;
-
+  // Interactive crop UI state.
   bool m_isCropping = false;
   QRectF m_tempCropRect;
 

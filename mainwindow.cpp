@@ -2,16 +2,13 @@
 #include "constants.h"
 #include "layoutscene.h"
 #include "layoutserializer.h"
-#include "mirroredappitem.h"
 #include "newlayoutdialog.h"
 #include "officetoolbar.h"
-#include "projectorwindow.h"
 #include "propertiesdialog.h"
 #include "resizableappitem.h"
 #include "rulerbar.h"
 #include "settingsdialog.h"
 #include "snappingitemgroup.h"
-#include "windowselector.h"
 #include "zoneitem.h"
 
 #include <QAction>
@@ -51,7 +48,8 @@
 
 #include "formatpanel.h"
 #include "presentercontroller.h"
-#include "outputrecorder.h"
+#include "outputcontroller.h"
+#include "capturecontroller.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), m_pScene(nullptr), m_pToolbar(nullptr), m_pTopBarSpin(nullptr), m_pBotBarSpin(nullptr), m_isModified(false) {
@@ -102,10 +100,15 @@ MainWindow::MainWindow(QWidget* parent)
   m_pProperties->hide();
   m_pProperties->move(20, 20);
 
+  // Created before the toolbar: createToolbar() places the controller's output
+  // actions in the ribbon.
+  m_pOutputController = new OutputController(this, this);
+  connect(m_pOutputController, &OutputController::statusMessage, this,
+          [this](const QString& msg) { statusBar()->showMessage(msg, Constants::StatusMessageDuration); });
+
   createToolbar();
   createMenuBar();
   m_pPresenter = new PresenterController(m_pView, this);
-  m_pOutputRecorder = new OutputRecorder(this);
 
   // Escape cancels the active draw/laser tool and returns to the Move tool.
   QAction* resetToolAct = new QAction(this);
@@ -128,25 +131,8 @@ MainWindow::MainWindow(QWidget* parent)
     }
   });
 
-  m_selector = new WindowSelector(this);
-
-  connect(m_selector, &WindowSelector::windowSelectedForGStreamer, this, [this](const QString& captureSource) { addMirroredApp(captureSource); });
-}
-
-void MainWindow::addMirroredApp(const QString& captureSource) {
-  if (!m_pScene) {
-    return;
-  }
-
-  // Pass the OS-specific capture string into the item.
-  MirroredAppItem* item = new MirroredAppItem(captureSource);
-
-  item->initActions();
-  connect(item, &ResizableAppItem::propertiesRequested, this, &MainWindow::showProperties);
-
-  m_pScene->addItem(item);
-  m_pScene->clearSelection();
-  item->setSelected(true);
+  m_pCaptureController = new CaptureController(m_pView, this);
+  connect(m_pCaptureController, &CaptureController::propertiesRequested, this, &MainWindow::showProperties);
 }
 
 MainWindow::~MainWindow() {
@@ -157,9 +143,8 @@ MainWindow::~MainWindow() {
 
 void MainWindow::closeEvent(QCloseEvent* event) {
   if (maybeSave()) {
-    if (m_pProjector) {
-      m_pProjector->close();
-    }
+    m_pOutputController->stopRecording();
+    m_pOutputController->stopOutput();
 
     event->accept();
   } else {
@@ -271,17 +256,6 @@ void MainWindow::toggleFullScreen() {
   }
 }
 
-void MainWindow::stopOutputRecording() {
-  if (m_pOutputRecorder && m_pOutputRecorder->isRecording()) {
-    m_pOutputRecorder->stop();
-    if (m_pRecordAction) {
-      m_pRecordAction->setIcon(QIcon(":/icons/record.svg"));
-      m_pRecordAction->setText("Record Output");
-    }
-    statusBar()->showMessage("Recording stopped.", Constants::StatusMessageDuration);
-  }
-}
-
 void MainWindow::newLayout() {
   if (!maybeSave()) {
     return;
@@ -290,7 +264,6 @@ void MainWindow::newLayout() {
   NewLayoutDialog dlg(this);
   if (dlg.exec() == QDialog::Accepted) {
     if (m_pScene) {
-      stopOutputRecording();
       m_pScene->deleteLater();
     }
 
@@ -307,9 +280,10 @@ void MainWindow::newLayout() {
     connectSceneSignals();
 
     m_pView->setScene(m_pScene);
-    if (m_pProjector) {
-      m_pProjector->setScene(m_pScene);
-    }
+    // Stops any recording bound to the old scene and points an open projector at
+    // the new one.
+    m_pOutputController->setScene(m_pScene);
+    m_pCaptureController->setScene(m_pScene);
     updateInterfaceState();
     setModified(false);
 
@@ -335,15 +309,13 @@ void MainWindow::closeLayout() {
     return;
   }
 
-  if (m_pProjector) {
-    m_pProjector->close();
-  }
+  // Stops recording and closes the projector (no layout left to show).
+  m_pOutputController->setScene(nullptr);
+  m_pCaptureController->setScene(nullptr);
 
   if (!m_pScene) {
     return;
   }
-
-  stopOutputRecording();
 
   m_pView->setScene(m_pEmptyScene);
 
@@ -395,13 +367,8 @@ void MainWindow::openSettings() {
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
-  if (m_isSelectingWindow && event->type() == QEvent::MouseButtonPress) {
-    if (static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
-      m_pView->viewport()->releaseMouse();
-      m_isSelectingWindow = false;
-      m_selector->captureWindowUnderCursor();
-      return true;
-    }
+  if (m_pCaptureController && m_pCaptureController->handleViewportEvent(watched, event)) {
+    return true;
   }
 
   if (event->type() == QEvent::MouseMove) {
@@ -510,32 +477,6 @@ void MainWindow::onSceneChanged(const QList<QRectF>& region) {
       m_pProperties->refreshValues();
     }
   }
-}
-
-void MainWindow::addApp(QAction* action) {
-  if (!m_pScene) {
-    return;
-  }
-
-  QString type = action->text();
-  double w = 400, h = 300;
-  if (type == "Browser") {
-    w = 800;
-    h = 600;
-  } else if (type == "Terminal") {
-    w = 600;
-    h = 400;
-  }
-
-  ResizableAppItem* item = m_pScene->addAppItem(type, QRectF(0, 0, w, h));
-  QRectF safe = m_pScene->getWorkingArea();
-  int startX = safe.left() + 20;
-  int startY = safe.top() + 20;
-  if (m_pScene->isGridEnabled()) {
-    startX = std::round(startX / (double)m_pScene->gridSize()) * m_pScene->gridSize();
-    startY = std::round(startY / (double)m_pScene->gridSize()) * m_pScene->gridSize();
-  }
-  item->setPos(startX, startY);
 }
 
 void MainWindow::addZone() {
@@ -750,6 +691,8 @@ void MainWindow::loadLayout() {
     m_pScene->setItemIndexMethod(QGraphicsScene::NoIndex);
     m_pView->setScene(m_pScene);
     m_pPresenter->setScene(m_pScene);
+    m_pOutputController->setScene(m_pScene);
+    m_pCaptureController->setScene(m_pScene);
     connectSceneSignals();
     updateInterfaceState();
   }
@@ -847,33 +790,8 @@ void MainWindow::createToolbar() {
   addMenu->setStyleSheet(controlStyle);
   addBtn->setMenu(addMenu);
 
-  // Rebuild the list of currently open windows each time the menu opens, so the
-  // user can mirror a live app picked from the list (with its own icon).
-  connect(addMenu, &QMenu::aboutToShow, this, [this, addMenu]() {
-    addMenu->clear();
-
-    const QList<WindowSelector::WindowEntry> windows = m_selector->listWindows();
-    if (windows.isEmpty()) {
-      QAction* none = addMenu->addAction("No open windows found");
-      none->setEnabled(false);
-    } else {
-      for (const WindowSelector::WindowEntry& win : windows) {
-        QAction* act = addMenu->addAction(win.icon, win.title);
-        const QString source = win.captureSource;
-        connect(act, &QAction::triggered, this, [this, source]() { addMirroredApp(source); });
-      }
-    }
-
-    addMenu->addSeparator();
-
-    // Generic placeholders for designing a layout before the real apps are open.
-    QMenu* placeholderMenu = addMenu->addMenu("Placeholder");
-    const QStringList placeholders = {"Browser", "Terminal", "Music Player", "File Manager"};
-    for (const QString& name : placeholders) {
-      QAction* act = placeholderMenu->addAction(name);
-      connect(act, &QAction::triggered, this, [this, act]() { addApp(act); });
-    }
-  });
+  // The controller rebuilds the open-window list + placeholders on each open.
+  connect(addMenu, &QMenu::aboutToShow, this, [this, addMenu]() { m_pCaptureController->populateAddAppMenu(addMenu); });
 
   m_pSectionInsert->addLargeButton((RibbonButton*)addBtn);
 
@@ -890,21 +808,11 @@ void MainWindow::createToolbar() {
   // 1. MAIN RIBBON: MIRROR STREAM BUTTON
   // ==========================================
   QAction* mirrorAct = new QAction(QIcon(":/icons/mirror.svg"), "Mirror Stream", this);
-  connect(mirrorAct, &QAction::triggered, this, [this]() {
-    if (!m_pScene)
-      return;
-
-    // Hijack the mouse globally and change to a crosshair.
-    // The unified eventFilter will catch the very next click and route it
-    // to m_selector->captureWindowUnderCursor();
-    m_pView->viewport()->grabMouse(Qt::CrossCursor);
-    m_isSelectingWindow = true;
-  });
-  // Add to your specific Ribbon section
+  connect(mirrorAct, &QAction::triggered, this, [this]() { m_pCaptureController->beginWindowPick(); });
   m_pSectionInsert->addLargeButton(new RibbonButton(mirrorAct, RibbonButton::Large));
 
   // ==========================================
-  // 2. MAIN RIBBON: PROJECTOR/OUTPUT BUTTON
+  // 2. MAIN RIBBON: OUTPUT (projector + recording), owned by OutputController
   // ==========================================
   QToolButton* projBtn = new RibbonButton(new QAction(QIcon(":/icons/output.svg"), "Send to Output", this), RibbonButton::Large);
   projBtn->setPopupMode(QToolButton::InstantPopup);
@@ -913,113 +821,12 @@ void MainWindow::createToolbar() {
   projMenu->setStyleSheet(controlStyle);
   projBtn->setMenu(projMenu);
 
-  // Dynamically build the monitor list right before the menu opens
-  connect(projMenu, &QMenu::aboutToShow, this, [this, projMenu]() {
-    projMenu->clear();
-
-    QList<QScreen*> screens = QApplication::screens();
-    for (int i = 0; i < screens.size(); ++i) {
-      QScreen* screen = screens[i];
-
-      // Format looks like: "Screen 2: DELL U2720Q (3840x2160)"
-      const QString screenName =
-          QStringLiteral("Screen %1: %2 (%3x%4)")
-              .arg(QString::number(i + 1), screen->name(), QString::number(screen->geometry().width()), QString::number(screen->geometry().height()));
-
-      QAction* screenAct = projMenu->addAction(screenName);
-      connect(screenAct, &QAction::triggered, this, [this, screen]() {
-        if (!m_pScene) {
-          return;
-        }
-        if (!m_pProjector) {
-          m_pProjector = new ProjectorWindow(m_pScene);
-          m_pProjector->setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-        }
-
-        // CRITICAL: Pull it out of fullscreen first before moving it to a new monitor!
-        m_pProjector->showNormal();
-
-        QRect screenGeo = screen->geometry();
-        m_pProjector->move(screenGeo.topLeft());
-        m_pProjector->resize(screenGeo.size());
-        m_pProjector->showFullScreen();
-      });
-    }
-
-    projMenu->addSeparator();
-
-    // Keep a fallback windowed mode for easy local testing
-    QAction* windowedAct = projMenu->addAction("Windowed Mode (Local Test)");
-    connect(windowedAct, &QAction::triggered, this, [this]() {
-      if (!m_pScene) {
-        return;
-      }
-      if (!m_pProjector) {
-        m_pProjector = new ProjectorWindow(m_pScene);
-      }
-      m_pProjector->showNormal();
-      m_pProjector->resize(1280, 720);
-      m_pProjector->show();
-    });
-  });
+  // The controller builds the monitor list fresh each time the menu opens.
+  connect(projMenu, &QMenu::aboutToShow, this, [this, projMenu]() { m_pOutputController->populateScreenMenu(projMenu); });
 
   m_pSectionInsert->addLargeButton((RibbonButton*)projBtn);
-
-  // ==========================================
-  // 3. MAIN RIBBON: STOP OUTPUT BUTTON
-  // ==========================================
-  QAction* stopProjAct = new QAction(QIcon(":/icons/stop_output.svg"), "Stop Output", this);
-
-  connect(stopProjAct, &QAction::triggered, this, [this]() {
-    if (m_pProjector) {
-      m_pProjector->close();        // Safely close the window
-      m_pProjector->deleteLater();  // Queue it for memory deletion
-      m_pProjector = nullptr;       // Reset the pointer so we can launch it again later
-
-      statusBar()->showMessage("Projector output stopped.", Constants::StatusMessageDuration);
-    }
-  });
-
-  m_pSectionInsert->addLargeButton(new RibbonButton(stopProjAct, RibbonButton::Large));
-
-  // ==========================================
-  // 4. MAIN RIBBON: RECORD OUTPUT BUTTON
-  // ==========================================
-  m_pRecordAction = new QAction(QIcon(":/icons/record.svg"), "Record Output", this);
-
-  connect(m_pRecordAction, &QAction::triggered, this, [this]() {
-    if (!m_pOutputRecorder) {
-      return;
-    }
-
-    if (m_pOutputRecorder->isRecording()) {
-      m_pOutputRecorder->stop();
-      m_pRecordAction->setIcon(QIcon(":/icons/record.svg"));
-      m_pRecordAction->setText("Record Output");
-      statusBar()->showMessage("Recording stopped.", Constants::StatusMessageDuration);
-      return;
-    }
-
-    if (!m_pScene) {
-      statusBar()->showMessage("Create or open a layout before recording.", Constants::StatusMessageDuration);
-      return;
-    }
-
-    const QString fileName = QFileDialog::getSaveFileName(this, "Record Output To", "", "Video (*.mkv)", nullptr, QFileDialog::DontUseNativeDialog);
-    if (fileName.isEmpty()) {
-      return;
-    }
-
-    if (m_pOutputRecorder->start(m_pScene, fileName)) {
-      m_pRecordAction->setIcon(QIcon(":/icons/stop-record.svg"));
-      m_pRecordAction->setText("Stop Recording");
-      statusBar()->showMessage("Recording output...", Constants::StatusMessageDuration);
-    } else {
-      statusBar()->showMessage("Failed to start recording.", Constants::StatusMessageDuration);
-    }
-  });
-
-  m_pSectionInsert->addLargeButton(new RibbonButton(m_pRecordAction, RibbonButton::Large));
+  m_pSectionInsert->addLargeButton(new RibbonButton(m_pOutputController->stopOutputAction(), RibbonButton::Large));
+  m_pSectionInsert->addLargeButton(new RibbonButton(m_pOutputController->recordAction(), RibbonButton::Large));
 
   QAction* wallAct = new QAction(QIcon(":/icons/image.svg"), "Wallpaper", this);
   connect(wallAct, &QAction::triggered, this, &MainWindow::setWallpaper);
