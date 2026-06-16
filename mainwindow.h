@@ -35,6 +35,12 @@ public:
   void showProperties(QGraphicsItem* item = nullptr);
   void toggleFullScreen();
 
+signals:
+  // Emitted whenever the active layout scene changes (nullptr when the layout is
+  // closed). Scene-aware controllers connect their setScene() to this so new
+  // controllers need wiring in exactly one place.
+  void sceneChanged(LayoutScene* scene);
+
 protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;

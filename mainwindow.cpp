@@ -133,6 +133,12 @@ MainWindow::MainWindow(QWidget* parent)
 
   m_pCaptureController = new CaptureController(m_pView, this);
   connect(m_pCaptureController, &CaptureController::propertiesRequested, this, &MainWindow::showProperties);
+
+  // Single point of wiring for scene-aware controllers: each follows the active
+  // scene by connecting its setScene() to sceneChanged().
+  connect(this, &MainWindow::sceneChanged, m_pPresenter, &PresenterController::setScene);
+  connect(this, &MainWindow::sceneChanged, m_pOutputController, &OutputController::setScene);
+  connect(this, &MainWindow::sceneChanged, m_pCaptureController, &CaptureController::setScene);
 }
 
 MainWindow::~MainWindow() {
@@ -275,15 +281,12 @@ void MainWindow::newLayout() {
     m_pScene->setTopBarHeight(SettingsDialog::getTopBarHeight());
     m_pScene->setBottomBarHeight(SettingsDialog::getBottomBarHeight());
 
-    m_pPresenter->setScene(m_pScene);
-
     connectSceneSignals();
 
     m_pView->setScene(m_pScene);
-    // Stops any recording bound to the old scene and points an open projector at
-    // the new one.
-    m_pOutputController->setScene(m_pScene);
-    m_pCaptureController->setScene(m_pScene);
+    // Fans out to the presenter, output, and capture controllers (rebuilds the
+    // drawing manager, points an open projector at the new scene, etc.).
+    emit sceneChanged(m_pScene);
     updateInterfaceState();
     setModified(false);
 
@@ -309,19 +312,15 @@ void MainWindow::closeLayout() {
     return;
   }
 
-  // Stops recording and closes the projector (no layout left to show).
-  m_pOutputController->setScene(nullptr);
-  m_pCaptureController->setScene(nullptr);
+  // Fans out to every scene-aware controller: stop recording, close the
+  // projector, and tear the drawing manager down while the scene is still alive.
+  emit sceneChanged(nullptr);
 
   if (!m_pScene) {
     return;
   }
 
   m_pView->setScene(m_pEmptyScene);
-
-  // Tear the drawing manager down while its scene is still alive.
-  m_pPresenter->setScene(nullptr);
-
   m_pScene->deleteLater();
   m_pScene = nullptr;
 
@@ -690,9 +689,7 @@ void MainWindow::loadLayout() {
     m_pScene = new LayoutScene(0, 0, 1920, 1080, this);
     m_pScene->setItemIndexMethod(QGraphicsScene::NoIndex);
     m_pView->setScene(m_pScene);
-    m_pPresenter->setScene(m_pScene);
-    m_pOutputController->setScene(m_pScene);
-    m_pCaptureController->setScene(m_pScene);
+    emit sceneChanged(m_pScene);
     connectSceneSignals();
     updateInterfaceState();
   }
