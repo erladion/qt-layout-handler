@@ -20,11 +20,10 @@ class RibbonSection;
 class QSpinBox;
 class QPushButton;
 
-class ProjectorWindow;
 class WindowSelector;
 class PresenterController;
 class FormatPanel;
-class OutputRecorder;
+class OutputController;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -83,10 +82,6 @@ private:
   bool maybeSave();
   void setModified(bool modified);
 
-  // Stops output recording (if active) and resets the Record button. Called
-  // before the active scene is destroyed so the recorder never dangles.
-  void stopOutputRecording();
-
   // Adds a live window-capture item to the scene for the given GStreamer source.
   void addMirroredApp(const QString& captureSource);
 
@@ -128,14 +123,12 @@ private:
 
   bool m_wasMaximized = false;
   WindowSelector* m_selector = nullptr;
-  QPointer<ProjectorWindow> m_pProjector = nullptr;
 
   bool m_isSelectingWindow = false;
 
   FormatPanel* m_pFormatPanel = nullptr;
 
-  OutputRecorder* m_pOutputRecorder = nullptr;
-  QAction* m_pRecordAction = nullptr;
+  OutputController* m_pOutputController = nullptr;
 };
 
 #endif  // MAINWINDOW_H
