@@ -20,10 +20,10 @@ class RibbonSection;
 class QSpinBox;
 class QPushButton;
 
-class WindowSelector;
 class PresenterController;
 class FormatPanel;
 class OutputController;
+class CaptureController;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -50,7 +50,6 @@ private slots:
   // Actions
   void newLayout();
   void closeLayout();
-  void addApp(QAction* action);
   void addZone();
   void removeWindow();
 
@@ -81,9 +80,6 @@ private:
   void updateInterfaceState();
   bool maybeSave();
   void setModified(bool modified);
-
-  // Adds a live window-capture item to the scene for the given GStreamer source.
-  void addMirroredApp(const QString& captureSource);
 
   void connectSceneSignals();
 
@@ -122,13 +118,11 @@ private:
   PresenterController* m_pPresenter = nullptr;
 
   bool m_wasMaximized = false;
-  WindowSelector* m_selector = nullptr;
-
-  bool m_isSelectingWindow = false;
 
   FormatPanel* m_pFormatPanel = nullptr;
 
   OutputController* m_pOutputController = nullptr;
+  CaptureController* m_pCaptureController = nullptr;
 };
 
 #endif  // MAINWINDOW_H
