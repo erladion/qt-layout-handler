@@ -31,14 +31,20 @@ QString selectH264Encoder() {
   // NVIDIA NVENC encodes from CUDA memory: a bare "videoconvert ! nvh264enc"
   // can't negotiate (empty file / "link has no sink"), so upload and convert on
   // the GPU first. Note nvh264enc has no "zerolatency" property.
+  //
+  // bitrate is in kbps and is the one quality knob present on every nvh264enc
+  // version; the default (~2 Mbps) is far too low for 1080p screen content and
+  // looks blocky, so raise it. (gst-inspect-1.0 nvh264enc shows version-specific
+  // options like rc-mode/qp-const for finer constant-quality control.)
   if (encoderUsable("nvh264enc")) {
+    const QString enc = QStringLiteral("nvh264enc bitrate=15000");
     if (encoderUsable("cudaupload") && encoderUsable("cudaconvert")) {
-      return QStringLiteral("cudaupload ! cudaconvert ! nvh264enc");
+      return QStringLiteral("cudaupload ! cudaconvert ! ") + enc;
     }
     if (encoderUsable("cudaupload")) {
-      return QStringLiteral("cudaupload ! nvh264enc");
+      return QStringLiteral("cudaupload ! ") + enc;
     }
-    return QStringLiteral("nvh264enc");
+    return enc;
   }
 
   // VA-API (Intel / AMD); vapostproc handles the upload/format when present.
@@ -50,8 +56,13 @@ QString selectH264Encoder() {
   }
 
   // Software fallbacks: reliable, encode system memory directly, no GPU session.
+  // Tuned for recording quality rather than live latency: veryfast (a big jump
+  // over ultrafast yet still real-time at 1080p) with constant-quantizer rate
+  // control (quantizer ~20) so the bitrate follows the content instead of being
+  // capped at x264enc's ~2 Mbps CBR default. Lower the quantizer for higher
+  // quality / larger files.
   if (encoderUsable("x264enc")) {
-    return QStringLiteral("x264enc tune=zerolatency speed-preset=ultrafast");
+    return QStringLiteral("x264enc speed-preset=veryfast pass=quant quantizer=20");
   }
   return QStringLiteral("openh264enc");
 }
