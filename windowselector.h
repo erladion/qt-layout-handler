@@ -12,6 +12,7 @@ public:
   // A capturable top-level window discovered on the system.
   struct WindowEntry {
     QString title;
+    QString appClass;       // Stable per-app identity (WM_CLASS) for re-matching.
     QString captureSource;  // GStreamer source string, e.g. "ximagesrc xid=123".
     QIcon icon;             // The window's own icon (may be null if unavailable).
   };
@@ -25,7 +26,7 @@ public:
   QList<WindowEntry> listWindows();
 
 signals:
-  void windowSelectedForGStreamer(const QString& pipelineString);
+  void windowPicked(const WindowEntry& entry);
 };
 
 #endif  // WINDOWSELECTOR_H

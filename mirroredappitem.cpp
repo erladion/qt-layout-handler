@@ -10,11 +10,20 @@
 #include "capturepipeline.h"
 #include "crophandleitem.h"
 
-MirroredAppItem::MirroredAppItem(const QString& captureSource) : ResizableAppItem("", QRectF(0, 0, 800, 600)) {
+MirroredAppItem::MirroredAppItem(const QString& captureSource, const QString& appClass, const QString& appTitle, const CaptureSettings& settings)
+    : ResizableAppItem("", QRectF(0, 0, 800, 600)), m_appClass(appClass), m_appTitle(appTitle), m_pendingSettings(settings) {
   setCacheMode(QGraphicsItem::NoCache);
 
-  m_pPipeline = new CapturePipeline(captureSource, this);
+  if (!captureSource.isEmpty()) {
+    m_pPipeline = new CapturePipeline(captureSource, this);
+    applyPendingToPipeline();
+    wirePipeline();
+  }
 
+  setupCustomActions();
+}
+
+void MirroredAppItem::wirePipeline() {
   // Repaint when a new frame arrives. The signal comes from the streaming
   // thread, so deliver it queued onto the GUI thread.
   connect(
@@ -41,14 +50,56 @@ MirroredAppItem::MirroredAppItem(const QString& captureSource) : ResizableAppIte
         updateStatusText();
       },
       Qt::QueuedConnection);
+}
 
-  setupCustomActions();
+void MirroredAppItem::applyPendingToPipeline() {
+  if (m_pPipeline) {
+    m_pPipeline->setCaptureSettings(m_pendingSettings.cropTop, m_pendingSettings.cropBottom, m_pendingSettings.cropLeft, m_pendingSettings.cropRight,
+                                    m_pendingSettings.framerate, m_pendingSettings.useDamage);
+  }
+}
+
+void MirroredAppItem::bindToSource(const QString& captureSource) {
+  if (captureSource.isEmpty()) {
+    return;
+  }
+
+  // Preserve current settings, then swap pipelines.
+  m_pendingSettings = captureSettings();
+  delete m_pPipeline;  // null-safe; the old pipeline finalizes itself.
+  m_pPipeline = new CapturePipeline(captureSource, this);
+  applyPendingToPipeline();
+  wirePipeline();
+
+  updateStatusText();
+  update();
+}
+
+void MirroredAppItem::setIdentity(const QString& appClass, const QString& appTitle) {
+  m_appClass = appClass;
+  m_appTitle = appTitle;
+  updateStatusText();
+  update();
+}
+
+CaptureSettings MirroredAppItem::captureSettings() const {
+  if (m_pPipeline) {
+    return {m_pPipeline->cropTop(),   m_pPipeline->cropBottom(), m_pPipeline->cropLeft(),
+            m_pPipeline->cropRight(),  m_pPipeline->framerate(),  m_pPipeline->useDamage()};
+  }
+  return m_pendingSettings;
 }
 
 void MirroredAppItem::setupCustomActions() {
-  const QString actionText = m_pPipeline->isRecording() ? "Stop Recording" : "Start Recording";
-  QAction* recordAction = new QAction(actionText, this);
+  QAction* bindAction = new QAction("Bind to window…", this);
+  connect(bindAction, &QAction::triggered, this, [this]() { emit rebindRequested(this); });
+  m_pContextMenu.addAction(bindAction);
+
+  QAction* recordAction = new QAction("Start Recording", this);
   connect(recordAction, &QAction::triggered, this, [this]() {
+    if (!m_pPipeline) {
+      return;
+    }
     if (!m_pPipeline->isRecording()) {
       const QString filename = QFileDialog::getSaveFileName(nullptr, "Save Video", "", "Video (*.mkv)", nullptr, QFileDialog::DontUseNativeDialog);
       if (filename.isEmpty()) {
@@ -62,7 +113,11 @@ void MirroredAppItem::setupCustomActions() {
   m_pContextMenu.addAction(recordAction);
 
   QAction* interactiveCropAction = new QAction("Interactive Crop", this);
-  connect(interactiveCropAction, &QAction::triggered, this, [this]() { enterCropMode(); });
+  connect(interactiveCropAction, &QAction::triggered, this, [this]() {
+    if (m_pPipeline) {
+      enterCropMode();
+    }
+  });
   m_pContextMenu.addAction(interactiveCropAction);
 
   // Per-item capture frame rate. Dropping heavy windows (e.g. VS Code) to a
@@ -71,22 +126,34 @@ void MirroredAppItem::setupCustomActions() {
   QActionGroup* fpsGroup = new QActionGroup(this);
   fpsGroup->setExclusive(true);
   const int fpsOptions[] = {5, 10, 15, 24, 30, 60};
+  const int currentFps = captureSettings().framerate;
   for (int fps : fpsOptions) {
     QAction* fpsAction = fpsMenu->addAction(QString("%1 fps").arg(fps));
     fpsAction->setCheckable(true);
-    fpsAction->setChecked(fps == m_pPipeline->framerate());
+    fpsAction->setChecked(fps == currentFps);
     fpsGroup->addAction(fpsAction);
-    connect(fpsAction, &QAction::triggered, this, [this, fps]() { m_pPipeline->setFramerate(fps); });
+    connect(fpsAction, &QAction::triggered, this, [this, fps]() {
+      if (m_pPipeline) {
+        m_pPipeline->setFramerate(fps);
+      } else {
+        m_pendingSettings.framerate = fps;
+      }
+    });
   }
 
-  // use-damage only exists on X11 ximagesrc captures, so only offer it there.
-  if (m_pPipeline->isXImageSource()) {
-    QAction* damageAction = new QAction("Use XDamage (lighter, jittery)", this);
-    damageAction->setCheckable(true);
-    damageAction->setChecked(m_pPipeline->useDamage());
-    connect(damageAction, &QAction::toggled, this, [this](bool on) { m_pPipeline->setUseDamage(on); });
-    m_pContextMenu.addAction(damageAction);
-  }
+  // use-damage only affects X11 ximagesrc captures, but we always offer it (it's
+  // a harmless no-op on other sources) so disconnected placeholders can set it.
+  QAction* damageAction = new QAction("Use XDamage (lighter, jittery)", this);
+  damageAction->setCheckable(true);
+  damageAction->setChecked(captureSettings().useDamage);
+  connect(damageAction, &QAction::toggled, this, [this](bool on) {
+    if (m_pPipeline) {
+      m_pPipeline->setUseDamage(on);
+    } else {
+      m_pendingSettings.useDamage = on;
+    }
+  });
+  m_pContextMenu.addAction(damageAction);
 }
 
 void MirroredAppItem::enterCropMode() {
@@ -158,23 +225,46 @@ void MirroredAppItem::updateCropHandles(CropHandleItem* movedHandle, int pos) {
 }
 
 void MirroredAppItem::updateCropValues(int top, int bottom, int left, int right) {
-  m_pPipeline->setCrop(top, bottom, left, right);
+  if (m_pPipeline) {
+    m_pPipeline->setCrop(top, bottom, left, right);
+  } else {
+    m_pendingSettings.cropTop = top;
+    m_pendingSettings.cropBottom = bottom;
+    m_pendingSettings.cropLeft = left;
+    m_pendingSettings.cropRight = right;
+  }
 }
 
 int MirroredAppItem::cropTop() const {
-  return m_pPipeline->cropTop();
+  return m_pPipeline ? m_pPipeline->cropTop() : m_pendingSettings.cropTop;
 }
 int MirroredAppItem::cropBottom() const {
-  return m_pPipeline->cropBottom();
+  return m_pPipeline ? m_pPipeline->cropBottom() : m_pendingSettings.cropBottom;
 }
 int MirroredAppItem::cropLeft() const {
-  return m_pPipeline->cropLeft();
+  return m_pPipeline ? m_pPipeline->cropLeft() : m_pendingSettings.cropLeft;
 }
 int MirroredAppItem::cropRight() const {
-  return m_pPipeline->cropRight();
+  return m_pPipeline ? m_pPipeline->cropRight() : m_pendingSettings.cropRight;
 }
 
 void MirroredAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
+  if (!m_pPipeline) {
+    // Disconnected placeholder: no live window matched.
+    painter->save();
+    painter->fillRect(rect(), QColor(40, 40, 40, 220));
+    painter->setPen(Qt::white);
+    const QString label = m_appTitle.isEmpty() ? m_appClass : m_appTitle;
+    painter->drawText(rect(), Qt::AlignCenter, QString("Waiting for:\n%1\n\n(right-click → Bind to window)").arg(label));
+    painter->restore();
+
+    QBrush originalBrush = brush();
+    setBrush(Qt::NoBrush);
+    ResizableAppItem::paint(painter, option, widget);
+    setBrush(originalBrush);
+    return;
+  }
+
   const QImage frameToDraw = m_pPipeline->currentFrame();
 
   if (!frameToDraw.isNull()) {
@@ -220,6 +310,11 @@ void MirroredAppItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* o
 }
 
 void MirroredAppItem::applyInteractiveCrop() {
+  if (!m_pPipeline) {
+    exitCropMode();
+    return;
+  }
+
   int topDelta = 0, bottomDelta = 0, leftDelta = 0, rightDelta = 0;
 
   const QImage frame = m_pPipeline->currentFrame();

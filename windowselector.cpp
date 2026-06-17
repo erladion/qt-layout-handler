@@ -11,6 +11,7 @@
 #elif defined(Q_OS_LINUX)
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <unistd.h>
 #endif
 
@@ -57,6 +58,49 @@ QImage iconFromNetWmIcon(const unsigned long* data, unsigned long count, int pre
   return best;
 }
 
+// Window title: prefer _NET_WM_NAME (UTF-8), fall back to WM_NAME.
+QString readWindowTitle(Display* display, Window w) {
+  QString title;
+  const Atom netWmName = XInternAtom(display, "_NET_WM_NAME", True);
+  const Atom utf8 = XInternAtom(display, "UTF8_STRING", True);
+  if (netWmName != None && utf8 != None) {
+    Atom type = None;
+    int format = 0;
+    unsigned long nItems = 0, bytesAfter = 0;
+    unsigned char* data = nullptr;
+    if (XGetWindowProperty(display, w, netWmName, 0, 1024, False, utf8, &type, &format, &nItems, &bytesAfter, &data) == Success && data) {
+      title = QString::fromUtf8(reinterpret_cast<char*>(data));
+      XFree(data);
+    }
+  }
+  if (title.isEmpty()) {
+    char* wmName = nullptr;
+    if (XFetchName(display, w, &wmName) && wmName) {
+      title = QString::fromLocal8Bit(wmName);
+      XFree(wmName);
+    }
+  }
+  return title;
+}
+
+// WM_CLASS "class" string (e.g. "code", "firefox") — a stable per-app identity.
+QString readWindowClass(Display* display, Window w) {
+  QString appClass;
+  XClassHint hint = {nullptr, nullptr};
+  if (XGetClassHint(display, w, &hint)) {
+    if (hint.res_class) {
+      appClass = QString::fromLocal8Bit(hint.res_class);
+    }
+    if (hint.res_name) {
+      XFree(hint.res_name);
+    }
+    if (hint.res_class) {
+      XFree(hint.res_class);
+    }
+  }
+  return appClass;
+}
+
 }  // namespace
 #endif
 
@@ -72,8 +116,6 @@ QList<WindowSelector::WindowEntry> WindowSelector::listWindows() {
   Window root = DefaultRootWindow(display);
 
   const Atom netClientList = XInternAtom(display, "_NET_CLIENT_LIST", True);
-  const Atom netWmName = XInternAtom(display, "_NET_WM_NAME", True);
-  const Atom utf8 = XInternAtom(display, "UTF8_STRING", True);
   const Atom netWmIcon = XInternAtom(display, "_NET_WM_ICON", True);
   const Atom netWmPid = XInternAtom(display, "_NET_WM_PID", True);
 
@@ -110,29 +152,14 @@ QList<WindowSelector::WindowEntry> WindowSelector::listWindows() {
       }
     }
 
-    // Title: prefer _NET_WM_NAME (UTF-8), fall back to WM_NAME.
-    QString title;
-    if (netWmName != None && utf8 != None) {
-      unsigned char* nameData = nullptr;
-      if (XGetWindowProperty(display, w, netWmName, 0, 1024, False, utf8, &actualType, &actualFormat, &nItems, &bytesAfter, &nameData) == Success &&
-          nameData) {
-        title = QString::fromUtf8(reinterpret_cast<char*>(nameData));
-        XFree(nameData);
-      }
-    }
-    if (title.isEmpty()) {
-      char* wmName = nullptr;
-      if (XFetchName(display, w, &wmName) && wmName) {
-        title = QString::fromLocal8Bit(wmName);
-        XFree(wmName);
-      }
-    }
+    const QString title = readWindowTitle(display, w);
     if (title.isEmpty()) {
       continue;  // Untitled windows are usually utility/dock surfaces.
     }
 
     WindowEntry entry;
     entry.title = title;
+    entry.appClass = readWindowClass(display, w);
     // The MirroredAppItem injects the per-item use-damage and frame rate.
     entry.captureSource = QString("ximagesrc xid=%1").arg(static_cast<qulonglong>(w));
 
@@ -197,10 +224,12 @@ void WindowSelector::captureWindowUnderCursor() {
     // specific application windows rather than the whole monitor.
     // quint64 hwndInt = static_cast<quint64>(reinterpret_cast<quintptr>(bestHwnd));
     // QString captureSource = QString("d3d11screencapturesrc capture-api=wgc window-handle=%1").arg(hwndInt);
-    // emit windowSelectedForGStreamer(captureSource);
 
-    QString captureSource = QStringLiteral("gdiscreencapsrc");
-    emit windowSelectedForGStreamer(captureSource);
+    WindowEntry entry;
+    entry.title = titleStr;
+    entry.appClass = titleStr;  // No WM_CLASS equivalent resolved here yet.
+    entry.captureSource = QStringLiteral("gdiscreencapsrc");
+    emit windowPicked(entry);
   }
 #elif defined(Q_OS_LINUX)
   // ==========================================
@@ -236,10 +265,13 @@ void WindowSelector::captureWindowUnderCursor() {
 
     qDebug() << "Captured Top-Level Linux XID:" << targetWindow;
 
-    // Build the Linux-specific GStreamer capture element. The MirroredAppItem
-    // injects the per-item use-damage and frame rate when it builds the pipeline.
-    QString captureSource = QString("ximagesrc xid=%1").arg(targetWindow);
-    emit windowSelectedForGStreamer(captureSource);
+    // The MirroredAppItem injects the per-item use-damage and frame rate when it
+    // builds the pipeline; carry the app identity for save/restore re-matching.
+    WindowEntry entry;
+    entry.title = readWindowTitle(display, targetWindow);
+    entry.appClass = readWindowClass(display, targetWindow);
+    entry.captureSource = QString("ximagesrc xid=%1").arg(static_cast<qulonglong>(targetWindow));
+    emit windowPicked(entry);
   }
 
   XCloseDisplay(display);

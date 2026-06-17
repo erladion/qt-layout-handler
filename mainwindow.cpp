@@ -694,7 +694,7 @@ void MainWindow::loadLayout() {
     updateInterfaceState();
   }
 
-  if (LayoutSerializer::load(m_pScene, fileName)) {
+  if (LayoutSerializer::load(m_pScene, fileName, m_pCaptureController)) {
     setModified(false);
     statusBar()->showMessage("Layout loaded from file.", Constants::StatusMessageDuration);
 

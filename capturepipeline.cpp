@@ -144,6 +144,20 @@ void CapturePipeline::addCrop(int top, int bottom, int left, int right) {
   applyCropLive(false);
 }
 
+void CapturePipeline::setCaptureSettings(int cropTop, int cropBottom, int cropLeft, int cropRight, int framerate, bool useDamage) {
+  const bool changed = m_cropTop != cropTop || m_cropBottom != cropBottom || m_cropLeft != cropLeft || m_cropRight != cropRight ||
+                       m_captureFramerate != framerate || m_useDamage != useDamage;
+  m_cropTop = cropTop;
+  m_cropBottom = cropBottom;
+  m_cropLeft = cropLeft;
+  m_cropRight = cropRight;
+  m_captureFramerate = framerate;
+  m_useDamage = useDamage;
+  if (changed) {
+    rebuild();
+  }
+}
+
 void CapturePipeline::applyCropLive(bool pauseWhileSetting) {
   if (!m_pipeline) {
     return;

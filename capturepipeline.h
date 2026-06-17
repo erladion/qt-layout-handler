@@ -50,6 +50,10 @@ public:
   void setCrop(int top, int bottom, int left, int right);
   void addCrop(int top, int bottom, int left, int right);
 
+  // Applies a full set of saved capture settings at once, rebuilding only if
+  // something actually changed (used when restoring an item from a layout).
+  void setCaptureSettings(int cropTop, int cropBottom, int cropLeft, int cropRight, int framerate, bool useDamage);
+
 signals:
   void frameReady();
   void sourceSizeChanged(const QSize& size);

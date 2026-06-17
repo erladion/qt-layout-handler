@@ -1,5 +1,6 @@
 #include "capturecontroller.h"
 
+#include <QCursor>
 #include <QGraphicsView>
 #include <QMenu>
 #include <QMouseEvent>
@@ -14,7 +15,8 @@
 
 CaptureController::CaptureController(QGraphicsView* view, QObject* parent) : QObject(parent), m_pView(view) {
   m_selector = new WindowSelector(this);
-  connect(m_selector, &WindowSelector::windowSelectedForGStreamer, this, [this](const QString& captureSource) { addMirroredApp(captureSource); });
+  connect(m_selector, &WindowSelector::windowPicked, this,
+          [this](const WindowSelector::WindowEntry& entry) { addMirroredApp(entry.captureSource, entry.appClass, entry.title); });
 }
 
 void CaptureController::setScene(LayoutScene* scene) {
@@ -33,7 +35,9 @@ void CaptureController::populateAddAppMenu(QMenu* menu) {
     for (const WindowSelector::WindowEntry& win : windows) {
       QAction* act = menu->addAction(win.icon, win.title);
       const QString source = win.captureSource;
-      connect(act, &QAction::triggered, this, [this, source]() { addMirroredApp(source); });
+      const QString appClass = win.appClass;
+      const QString title = win.title;
+      connect(act, &QAction::triggered, this, [this, source, appClass, title]() { addMirroredApp(source, appClass, title); });
     }
   }
 
@@ -71,19 +75,72 @@ bool CaptureController::handleViewportEvent(QObject* watched, QEvent* event) {
   return false;
 }
 
-void CaptureController::addMirroredApp(const QString& captureSource) {
+void CaptureController::addMirroredApp(const QString& captureSource, const QString& appClass, const QString& appTitle) {
   if (!m_pScene) {
     return;
   }
 
-  // Pass the OS-specific capture string into the item.
-  MirroredAppItem* item = new MirroredAppItem(captureSource);
+  MirroredAppItem* item = new MirroredAppItem(captureSource, appClass, appTitle);
   item->initActions();
-  connect(item, &ResizableAppItem::propertiesRequested, this, &CaptureController::propertiesRequested);
+  wireMirror(item);
 
   m_pScene->addItem(item);
   m_pScene->clearSelection();
   item->setSelected(true);
+}
+
+MirroredAppItem* CaptureController::createSavedMirror(const QString& appClass, const QString& appTitle, const CaptureSettings& settings) {
+  // Match the saved identity against currently open windows: prefer an exact
+  // class+title match, fall back to the first window of the same class.
+  QString source;  // Empty => disconnected placeholder.
+  const QList<WindowSelector::WindowEntry> windows = m_selector->listWindows();
+  const WindowSelector::WindowEntry* exact = nullptr;
+  const WindowSelector::WindowEntry* classMatch = nullptr;
+  for (const WindowSelector::WindowEntry& win : windows) {
+    if (!appClass.isEmpty() && win.appClass == appClass) {
+      if (win.title == appTitle) {
+        exact = &win;
+        break;
+      }
+      if (!classMatch) {
+        classMatch = &win;
+      }
+    }
+  }
+  const WindowSelector::WindowEntry* match = exact ? exact : classMatch;
+  if (match) {
+    source = match->captureSource;
+  }
+
+  MirroredAppItem* item = new MirroredAppItem(source, appClass, appTitle, settings);
+  item->initActions();
+  wireMirror(item);
+  return item;
+}
+
+void CaptureController::wireMirror(MirroredAppItem* item) {
+  connect(item, &ResizableAppItem::propertiesRequested, this, &CaptureController::propertiesRequested);
+  connect(item, &MirroredAppItem::rebindRequested, this, [this](MirroredAppItem* it) { showBindMenu(it); });
+}
+
+void CaptureController::showBindMenu(MirroredAppItem* item) {
+  QMenu menu;
+  const QList<WindowSelector::WindowEntry> windows = m_selector->listWindows();
+  if (windows.isEmpty()) {
+    menu.addAction("No open windows found")->setEnabled(false);
+  } else {
+    for (const WindowSelector::WindowEntry& win : windows) {
+      QAction* act = menu.addAction(win.icon, win.title);
+      const QString source = win.captureSource;
+      const QString appClass = win.appClass;
+      const QString title = win.title;
+      connect(act, &QAction::triggered, this, [item, source, appClass, title]() {
+        item->bindToSource(source);
+        item->setIdentity(appClass, title);
+      });
+    }
+  }
+  menu.exec(QCursor::pos());
 }
 
 void CaptureController::addPlaceholderApp(const QString& type) {
