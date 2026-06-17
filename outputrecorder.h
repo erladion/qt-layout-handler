@@ -12,7 +12,8 @@ class QTimer;
 
 // Records the program output (the composited scene shown on the projector) to
 // an .mkv file. Renders the scene at a fixed frame rate on the GUI thread and
-// pushes each frame into a GStreamer appsrc -> H.264 -> matroskamux pipeline.
+// pushes each frame into a GStreamer appsrc -> H.264 -> matroskamux pipeline,
+// optionally muxing in the default audio input.
 class OutputRecorder : public QObject {
   Q_OBJECT
 public:
@@ -25,6 +26,11 @@ public:
   void stop();
   bool isRecording() const { return m_isRecording; }
 
+  // Whether to capture the default audio input into the recording (when an audio
+  // encoder is available). Takes effect on the next start().
+  bool audioEnabled() const { return m_audioEnabled; }
+  void setAudioEnabled(bool on) { m_audioEnabled = on; }
+
 private:
   void grabFrame();
 
@@ -34,6 +40,8 @@ private:
   QTimer* m_pTimer = nullptr;
 
   bool m_isRecording = false;
+  bool m_audioEnabled = true;
+  bool m_audioActive = false;  // True while a recording actually includes audio.
   int m_width = 0;
   int m_height = 0;
   int m_fps = 30;

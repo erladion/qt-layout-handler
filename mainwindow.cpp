@@ -839,6 +839,9 @@ void MainWindow::createToolbar() {
   connect(tempMenu, &QMenu::triggered, this, &MainWindow::applyTemplate);
   m_pSectionInsert->addWidget(tempBtn, 1, 7);
 
+  // Record-audio toggle, beside the output/record buttons.
+  m_pSectionInsert->addWidget(new RibbonButton(m_pOutputController->recordAudioAction(), RibbonButton::Small), 2, 7);
+
   // --- SECTION: ARRANGE ---
   m_pSectionArrange = ribbon->addSection("Arrange", QIcon(":/icons/section-arrange.svg"));
 

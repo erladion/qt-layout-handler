@@ -30,6 +30,7 @@ public:
   // of the "Send to Output" screen menu.
   QAction* recordAction() const { return m_pRecordAction; }
   QAction* stopOutputAction() const { return m_pStopAction; }
+  QAction* recordAudioAction() const { return m_pRecordAudioAction; }
   void populateScreenMenu(QMenu* menu);
 
   void stopOutput();     // Close the projector window.
@@ -50,6 +51,7 @@ private:
 
   QAction* m_pRecordAction = nullptr;
   QAction* m_pStopAction = nullptr;
+  QAction* m_pRecordAudioAction = nullptr;
 };
 
 #endif  // OUTPUTCONTROLLER_H

@@ -1,5 +1,8 @@
 #include "gstutils.h"
 
+#include <QProcess>
+#include <QtGlobal>
+
 #include <gst/gst.h>
 
 // gst-launch-1.0 -e videotestsrc num-buffers=150 ! videoconvert ! \
@@ -12,15 +15,19 @@
 
 // gst-inspect-1.0 nvh264enc | sed -n '/SINK template/,/PRESENT/p'
 
-// True only if the element can actually be instantiated on this machine, not
-// merely that its plugin is registered (factory_find would lie about NVENC on a
-// box where the plugin is present but no usable encode device exists).
-static bool encoderUsable(const char* factory) {
-  if (GstElement* element = gst_element_factory_make(factory, nullptr)) {
+bool gstElementAvailable(const QString& factory) {
+  // factory_make (not factory_find) verifies the element can actually be
+  // instantiated on this machine, not merely that its plugin is registered
+  // (factory_find would lie about NVENC on a box with no usable encode device).
+  if (GstElement* element = gst_element_factory_make(factory.toUtf8().constData(), nullptr)) {
     gst_object_unref(element);
     return true;
   }
   return false;
+}
+
+static bool encoderUsable(const char* factory) {
+  return gstElementAvailable(QString::fromLatin1(factory));
 }
 
 QString selectH264Encoder() {
@@ -65,4 +72,44 @@ QString selectH264Encoder() {
     return QStringLiteral("x264enc speed-preset=veryfast pass=quant quantizer=20");
   }
   return QStringLiteral("openh264enc");
+}
+
+QString selectAudioEncoder() {
+  // Opus muxes into Matroska cleanly with no parser and sounds great at low
+  // bitrates; AAC/MP3 are fallbacks (and need their parsers present).
+  if (gstElementAvailable("opusenc")) {
+    return QStringLiteral("opusenc");
+  }
+  if (gstElementAvailable("avenc_aac") && gstElementAvailable("aacparse")) {
+    return QStringLiteral("avenc_aac ! aacparse");
+  }
+  if (gstElementAvailable("voaacenc") && gstElementAvailable("aacparse")) {
+    return QStringLiteral("voaacenc ! aacparse");
+  }
+  if (gstElementAvailable("lamemp3enc")) {
+    return QStringLiteral("lamemp3enc");
+  }
+  return QString();
+}
+
+QString selectAudioSource() {
+#if defined(Q_OS_LINUX)
+  // System/app audio is the default sink's monitor. Resolve the sink name via
+  // pactl (works on PulseAudio and PipeWire) and capture its ".monitor".
+  if (gstElementAvailable("pulsesrc")) {
+    QProcess pactl;
+    pactl.start(QStringLiteral("pactl"), {QStringLiteral("get-default-sink")});
+    if (pactl.waitForFinished(1000)) {
+      const QString sink = QString::fromUtf8(pactl.readAllStandardOutput()).trimmed();
+      if (!sink.isEmpty()) {
+        return QStringLiteral("pulsesrc device=\"%1.monitor\"").arg(sink);
+      }
+    }
+  }
+#endif
+  // Fall back to the default input (mic) when the monitor can't be resolved.
+  if (gstElementAvailable("autoaudiosrc")) {
+    return QStringLiteral("autoaudiosrc");
+  }
+  return QString();
 }

@@ -46,5 +46,6 @@
         <file>icons/record.svg</file>
         <file>icons/stop-record.svg</file>
         <file>icons/magnify.svg</file>
+        <file>icons/mic.svg</file>
     </qresource>
 </RCC>

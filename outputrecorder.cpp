@@ -42,12 +42,29 @@ bool OutputRecorder::start(QGraphicsScene* scene, const QString& filename) {
   }
 
   const QString encoder = selectH264Encoder();
-  const QString pipelineStr =
-      QString(
-          "appsrc name=mysrc is-live=true format=time do-timestamp=false ! "
-          "videoconvert ! %1 ! h264parse ! matroskamux ! "
-          "filesink location=\"%2\"")
-          .arg(encoder, filename);
+  const QString audioEncoder = m_audioEnabled ? selectAudioEncoder() : QString();
+  const QString audioSource = m_audioEnabled ? selectAudioSource() : QString();
+  m_audioActive = !audioEncoder.isEmpty() && !audioSource.isEmpty();
+
+  QString pipelineStr;
+  if (m_audioActive) {
+    // do-timestamp=true puts the pushed frames on the pipeline clock so they
+    // stay in sync with the live audio source; both feed one matroskamux.
+    pipelineStr =
+        QString(
+            "appsrc name=mysrc is-live=true format=time do-timestamp=true ! "
+            "videoconvert ! %1 ! h264parse ! queue ! mux. "
+            "%2 ! audioconvert ! audioresample ! %3 ! queue ! mux. "
+            "matroskamux name=mux ! filesink location=\"%4\"")
+            .arg(encoder, audioSource, audioEncoder, filename);
+  } else {
+    pipelineStr =
+        QString(
+            "appsrc name=mysrc is-live=true format=time do-timestamp=false ! "
+            "videoconvert ! %1 ! h264parse ! matroskamux ! "
+            "filesink location=\"%2\"")
+            .arg(encoder, filename);
+  }
 
   GError* error = nullptr;
   m_pPipeline = gst_parse_launch(pipelineStr.toUtf8().constData(), &error);
@@ -132,6 +149,12 @@ void OutputRecorder::stop() {
 
   if (m_pAppSrc) {
     gst_app_src_end_of_stream(GST_APP_SRC(m_pAppSrc));
+  }
+
+  // The live audio source won't EOS on its own, so send a pipeline-wide EOS as
+  // well; otherwise matroskamux never finalizes the file (missing audio pad EOS).
+  if (m_audioActive && m_pPipeline) {
+    gst_element_send_event(m_pPipeline, gst_event_new_eos());
   }
 
   if (m_pPipeline) {

@@ -25,6 +25,12 @@ OutputController::OutputController(QWidget* dialogParent, QObject* parent) : QOb
 
   m_pRecordAction = new QAction(QIcon(":/icons/record.svg"), "Record Output", this);
   connect(m_pRecordAction, &QAction::triggered, this, [this]() { toggleRecording(); });
+
+  m_pRecordAudioAction = new QAction(QIcon(":/icons/mic.svg"), "Record Audio", this);
+  m_pRecordAudioAction->setToolTip("Capture system/app audio into recordings (falls back to mic)");
+  m_pRecordAudioAction->setCheckable(true);
+  m_pRecordAudioAction->setChecked(m_pRecorder->audioEnabled());
+  connect(m_pRecordAudioAction, &QAction::toggled, this, [this](bool on) { m_pRecorder->setAudioEnabled(on); });
 }
 
 void OutputController::setScene(LayoutScene* scene) {
